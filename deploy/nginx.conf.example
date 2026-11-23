@@ -1,0 +1,37 @@
+# 根据部署域名、路径和上游地址调整，证书配置由部署环境提供。
+server {
+    listen 443 ssl;
+    server_name hub.example.com;
+    root /srv/html-hub/frontend/dist;
+    client_max_body_size 30m;
+    location / { try_files $uri $uri/ /index.html; }
+    location /api/ { proxy_pass http://127.0.0.1:8000; proxy_set_header Host $host; }
+    location /mcp/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_set_header Host $host;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name pages.example.net;
+    access_log off; # 内容路径含短时授权，不记录到访问日志。
+    # HTML 与管理界面使用不同安全源。不要在本域名提供管理 API。
+    location /view/ { proxy_pass http://127.0.0.1:8011; proxy_set_header Host $host; }
+    location /_objects/ {
+        internal;
+        # 与 S3_ENDPOINT 保持相同地址和 Host，以保证预签名 URL 校验成功。
+        proxy_pass http://127.0.0.1:9000/;
+        proxy_set_header Host 127.0.0.1:9000;
+        proxy_hide_header Set-Cookie;
+        proxy_hide_header Content-Security-Policy;
+        add_header Content-Security-Policy "sandbox allow-scripts; frame-ancestors https://hub.example.com; object-src 'none'; base-uri 'none'" always;
+        add_header Referrer-Policy no-referrer always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Cache-Control "private, no-store" always;
+        add_header Access-Control-Allow-Origin "*" always;
+    }
+    location / { return 404; }
+}

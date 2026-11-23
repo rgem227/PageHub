@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>PageHub 普通用户使用帮助</title>
+  <link rel="icon" href="/pagehub.svg" type="image/svg+xml">
+  <style>
+    :root{color-scheme:light;--ink:#1d2a3b;--muted:#64748b;--paper:#fff;--base:#f4f7fb;--line:#e3e9f1;--blue:#2364d2;--cyan:#128b98;--green:#268568;--red:#bd4c57;--shadow:0 12px 34px rgba(33,50,77,.07)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:88px}body{margin:0;background:var(--base);color:var(--ink);font:15px/1.75 "Segoe UI","Microsoft YaHei",sans-serif}button{font:inherit;color:inherit}a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}.top{position:sticky;top:0;z-index:5;height:62px;background:rgba(255,255,255,.94);border-bottom:1px solid var(--line);backdrop-filter:blur(14px);display:flex;align-items:center;gap:18px;padding:0 28px}.brand{display:flex;align-items:center;gap:10px;font-weight:750;font-size:14px;letter-spacing:0;color:var(--ink)}.brand img{width:26px;height:26px}.top-title{color:var(--muted);font-size:13px}.top-spacer{flex:1}.print{border:1px solid var(--line);border-radius:6px;background:white;padding:6px 11px;cursor:pointer}.layout{display:grid;grid-template-columns:244px minmax(0,1fr);max-width:1520px;margin:auto;min-height:calc(100vh - 62px)}.sidebar{position:sticky;top:62px;align-self:start;height:calc(100vh - 62px);overflow:auto;padding:27px 16px 36px 24px;border-right:1px solid var(--line);background:#f7f9fc}.side-label{margin:0 0 12px 10px;color:#8490a2;font-size:11px;font-weight:700}.side-nav{display:grid;gap:3px}.side-nav a{display:block;padding:7px 10px;border-radius:5px;color:#536276;font-size:13px;line-height:1.5}.side-nav a:hover,.side-nav a.active{background:#eaf0fc;color:#2059ba;text-decoration:none}.side-nav .sub{padding-left:25px;font-size:12px}.content{width:min(100%,1070px);padding:36px 46px 84px;margin:auto}.hero{padding:4px 0 25px;border-bottom:1px solid var(--line);margin-bottom:28px}.eyebrow{color:var(--cyan);font-size:11px;font-weight:700}.hero h1{font-size:30px;line-height:1.25;margin:7px 0 12px;letter-spacing:0}.hero p{max-width:760px;color:var(--muted);margin:0}.note{padding:13px 16px;border-left:3px solid var(--blue);background:#edf3ff;color:#405672;border-radius:0 5px 5px 0;margin:19px 0 0;font-size:13px}.chapters{display:grid;gap:22px}.chapter{scroll-margin-top:82px;border-bottom:1px solid var(--line);padding:0 0 28px}.chapter:last-child{border:0}.chapter-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}.number{width:29px;height:29px;flex:0 0 29px;display:grid;place-items:center;border-radius:6px;background:#e7efff;color:#2059ba;font-size:13px;font-weight:700}.chapter h2{font-size:19px;line-height:1.45;margin:0;letter-spacing:0}.chapter h3{font-size:15px;margin:19px 0 5px;letter-spacing:0}.chapter p{margin:7px 0;color:#435268}.chapter ul,.chapter ol{padding-left:21px;margin:7px 0 13px;color:#435268}.chapter li{margin:4px 0}.shot{margin:16px 0 8px;background:#eaf0f5;border:1px solid var(--line);border-radius:5px;overflow:hidden}.shot img{display:block;width:100%;height:auto;min-height:110px;object-fit:contain;background:#f4f6f9}.shot figcaption{padding:7px 11px;background:#fff;color:var(--muted);font-size:11px;border-top:1px solid var(--line)}.shot-dialog{max-width:780px;margin-left:auto;margin-right:auto}.shot-dialog img{min-height:0}.tip{padding:11px 14px;border:1px solid #dbe4f3;border-radius:5px;background:#fff;color:#536276;font-size:13px;margin:12px 0}.tip b{color:#2f4560}.tip.warn{border-color:#f0ddc9;background:#fffaf3}.steps{counter-reset:step;list-style:none;padding:0!important}.steps li{counter-increment:step;position:relative;padding-left:29px;margin:7px 0}.steps li:before{content:counter(step);position:absolute;left:0;top:1px;width:20px;height:20px;display:grid;place-items:center;border-radius:50%;background:#e8f4f2;color:#187366;font-size:11px;font-weight:700}.terms{display:grid;grid-template-columns:150px 1fr;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin:14px 0}.terms dt,.terms dd{padding:9px 12px;margin:0;border-bottom:1px solid var(--line)}.terms dt{background:#f9fafc;color:#34445a;font-weight:650}.terms dd{background:white;color:#58677b}.terms dt:last-of-type,.terms dd:last-of-type{border-bottom:0}.footer{padding-top:24px;margin-top:20px;border-top:1px solid var(--line);color:#7d8999;font-size:12px}.mobile-menu{display:none;border:1px solid var(--line);background:white;border-radius:5px;padding:5px 9px}@media(max-width:900px){.layout{grid-template-columns:205px minmax(0,1fr)}.content{padding:30px 27px 65px}}@media(max-width:680px){html{scroll-padding-top:66px}.top{height:54px;padding:0 13px;gap:10px}.top-title{display:none}.mobile-menu{display:block}.layout{display:block;min-height:calc(100vh - 54px)}.sidebar{display:none;position:fixed;z-index:10;top:54px;left:0;width:min(300px,86vw);height:calc(100vh - 54px);box-shadow:var(--shadow);border-right:1px solid var(--line)}.sidebar.open{display:block}.content{padding:24px 16px 55px}.hero h1{font-size:24px}.chapter h2{font-size:17px}.terms{grid-template-columns:110px 1fr}.terms dt,.terms dd{padding:8px;font-size:13px}.shot img{min-height:90px}}
+    @media print{body{background:white;font-size:12px}.top{position:static;border:0;padding:0 0 12px;height:auto}.print,.mobile-menu{display:none}.layout{display:block;max-width:none}.sidebar{display:none}.content{width:100%;padding:8px 0}.hero h1{font-size:24px}.chapter{break-inside:avoid;border-color:#ccc}.shot img{max-height:390px;object-fit:contain}.tip,.note,.terms{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <header class="top"><button class="mobile-menu" id="toggle-nav" aria-label="展开功能目录" aria-expanded="false">目录</button><a class="brand" href="/" aria-label="返回 PageHub"><img src="/pagehub.svg" alt=""><span>PAGE HUB</span></a><span class="top-title">普通用户使用帮助</span><span class="top-spacer"></span><button class="print" onclick="window.print()">打印 / 保存 PDF</button></header>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"><p class="side-label">使用手册</p><nav class="side-nav" aria-label="帮助章节">
+      <a href="#start">01　注册与登录</a><a href="#workspace">02　工作空间</a><a class="sub" href="#layouts">菜单布局</a><a href="#upload">03　发布页面</a><a href="#menus">04　菜单管理</a><a href="#pages">05　全部页面</a><a href="#files">06　文件管理与空间</a><a href="#history">07　上传记录</a><a href="#bookmarks">08　网站收藏</a><a href="#shares">09　页面分享</a><a href="#mcp">10　智能体与 MCP</a><a href="#settings">11　空间与个人设置</a><a href="#faq">12　常见问题</a>
+    </nav></aside>
+    <main class="content">
+      <section class="hero"><span class="eyebrow">PAGEHUB · USER GUIDE</span><h1>普通用户使用帮助</h1><p>从创建账号，到发布和整理 HTML 页面、连接智能体、收藏常用网站和分享页面。本手册按工作台中的日常操作顺序说明各功能。</p><div class="note">截图使用测试环境的 test 账号制作。页面、菜单、收藏示例来自该账号的现有数据；手机号、验证码、密码和访问凭证不会出现在截图中。</div></section>
+      <div class="chapters">
+        <section class="chapter" id="start"><div class="chapter-head"><span class="number">01</span><h2>注册与登录</h2></div>
+          <p>打开 PageHub 后，登录页提供“登录”和“注册”两个标签。登录时可填写用户名或手机号以及密码。每个手机号只能注册一个账号；注册会同时创建该用户自己的空间，其他用户看不到你的页面和文件。</p>
+          <figure class="shot"><img src="assets/login.png" alt="PageHub 登录界面"><figcaption>登录页。使用用户名或手机号登录工作空间。</figcaption></figure>
+          <ol class="steps"><li>选择“注册”，填写用户名、姓名、手机号、验证码和密码。</li><li>选择“获取验证码”，输入页面返回的本地开发验证码，再设置并确认密码。</li><li>选择“注册并立即使用”，注册成功后会自动进入工作空间。</li></ol>
+          <figure class="shot"><img src="assets/register.png" alt="注册表单，包含姓名和必填手机号"><figcaption>注册表单。姓名和手机号均为必填项。</figcaption></figure>
+          <div class="tip warn"><b>验证码模式：</b>当前环境使用临时开发验证码，不会发送真实短信。它仅用于开发测试，不代表手机号已收到或验证过短信。生产短信服务尚未接入。密码至少 10 位；忘记密码时请联系平台超级管理员处理账号。</div>
+        </section>
+
+        <section class="chapter" id="workspace"><div class="chapter-head"><span class="number">02</span><h2>工作空间</h2></div>
+          <p>工作空间是登录后的主要页面，提供菜单导航和页面入口。页面卡片按租户菜单顺序展示，卡片显示页面标题、所属菜单、文件大小和日期。可用搜索、菜单分类、排序和分页定位页面。点卡片打开页面；拖动卡片可以交换其顺序。</p>
+          <figure class="shot"><img src="assets/workspace-side.png" alt="左侧导航模式的工作空间"><figcaption>左侧导航：左栏显示最多三级菜单，一级菜单使用图标；左上角按钮可收起或展开菜单。</figcaption></figure>
+          <h3 id="layouts">三种菜单布局</h3>
+          <dl class="terms"><dt>左侧导航</dt><dd>左边以缩进树形显示一级、二级和三级菜单。选择一个分类后，主区域显示对应页面。</dd><dt>顶部导航</dt><dd>菜单显示在内容上方；一级分类可下拉显示子菜单，超出宽度的菜单收在“更多”中。</dd><dt>平铺</dt><dd>主区域以链接目录展示有页面的末级菜单，支持搜索、分类、排序和紧凑/列表视图。点目录项进入该菜单页面。</dd></dl>
+          <figure class="shot"><img src="assets/workspace-top.png" alt="顶部导航模式的工作空间"><figcaption>顶部导航：菜单区域占满可用宽度，内容区与导航分开。</figcaption></figure>
+          <figure class="shot"><img src="assets/workspace-flat.png" alt="平铺导航目录"><figcaption>平铺：只呈现末级入口，不把菜单目录和打开的页面混在一起。</figcaption></figure>
+          <figure class="shot"><img src="assets/workspace-list.png" alt="平铺目录的列表视图"><figcaption>平铺目录也可切换到列表视图。</figcaption></figure>
+          <h3>卡片与页面视图</h3><p>工作空间面向按菜单浏览和打开页面；“全部页面”面向搜索和管理所有页面。工作空间首页会展示部分页面卡片，使用“查看全部”进入完整列表。宽屏卡片自动增加列数，窄屏自动换行。</p>
+          <figure class="shot"><img src="assets/workspace-dark.png" alt="深色主题下的工作空间"><figcaption>浅色/深色主题只影响当前账号。</figcaption></figure>
+          <figure class="shot"><img src="assets/preview.png" alt="在 PageHub 页面框架内预览一个 HTML 页面"><figcaption>框架内页面预览。顶部提供刷新授权、分享和返回入口。</figcaption></figure>
+        </section>
+
+        <section class="chapter" id="upload"><div class="chapter-head"><span class="number">03</span><h2>发布 HTML 页面</h2></div>
+          <p>在工作空间或“全部页面”选择“上传页面”，可上传 <code>.html</code>、<code>.htm</code> 或 <code>.zip</code> 文件。ZIP 适用于带有图片、CSS、JavaScript 等资源的完整网页，也可作为翻页 HTML 演示上传。</p>
+          <figure class="shot shot-dialog"><img src="assets/upload.png" alt="HTML/HTM/ZIP 页面上传设置"><figcaption>上传对话框：可填写标题、最多三级的菜单路径和 ZIP 入口文件。</figcaption></figure>
+          <ol class="steps"><li>选择 HTML/HTM 或 ZIP 文件，确认页面标题。单文件大小上限由平台配置（当前默认 20 MB）。</li><li>填写菜单路径，以斜线分隔，例如“业务工具 / 报表 / 月报”。路径中不存在的菜单会自动创建。</li><li>ZIP 通常从根目录 <code>index.html</code> 开始；如果实际入口位于子目录，填写 ZIP 入口文件路径。也可在 ZIP 根目录提供 <code>manifest.json</code>。</li><li>选择“上传并发布”，等候后台解析。处理结果可到“上传记录”查看。</li></ol>
+          <div class="tip"><b>菜单挂接规则：</b>页面挂在路径的末级菜单。一个末级菜单只能挂一个页面；有子菜单的父节点本身不能同时挂页面。若目标末级菜单已被占用，请换一个菜单名称，或先在菜单管理新建一个空闲末级菜单。一级、二级或三级节点都可以成为末级菜单。</div>
+          <p>给现有页面上传新版本时，请从该页面卡片的“页面操作”菜单中选择“上传新版本”。这会更新同一个页面并保留历史版本；普通新上传会创建一个新页面。</p>
+        </section>
+
+        <section class="chapter" id="menus"><div class="chapter-head"><span class="number">04</span><h2>菜单管理</h2></div>
+          <p>菜单是用于组织工作空间的分类树，最多三级。一级、二级和三级菜单可以分别作为最终挂接页面的末级节点；父节点如果有子菜单，就不能直接挂页面。菜单名称和顺序可以后续调整。</p>
+          <figure class="shot"><img src="assets/menus.png" alt="带层级缩进和文件相对路径的菜单管理表格"><figcaption>菜单树展示缩进层级、完整路径、挂接页面及文件相对路径。</figcaption></figure>
+          <h3>新增菜单</h3><p>选择“新增菜单”后，先选一级、二级或三级。新增一级不需要选择父级；新增二级要指定一级父菜单；新增三级要指定二级父菜单。输入名称确认后会显示创建路径。</p>
+          <figure class="shot shot-dialog"><img src="assets/menu-create.png" alt="选择菜单级别、新建父节点下的菜单"><figcaption>新建菜单：选择级别、上级节点并填写菜单名称。</figcaption></figure>
+          <h3>编辑和拖动</h3><p>在菜单操作中编辑名称、父级、顺序及导航可见状态。也可拖动菜单名前的拖动柄：在同一父级内可换顺序；拖到其他节点上则调整父子层级。拖动一个有后代的一级或二级菜单时，整棵子树一起移动。系统会校验层级不超过三级；有页面的节点不可作为父菜单。</p>
+          <figure class="shot shot-dialog"><img src="assets/menu-edit.png" alt="菜单编辑对话框"><figcaption>编辑菜单时可以指定新上级并调整排序和可见性；后代节点随父节点一起移动。</figcaption></figure>
+          <div class="tip"><b>不想删除页面？</b>菜单只管页面分类。删除菜单不会替代“下架页面”或“彻底删除文件”；如果菜单已包含页面或子菜单，应先在“全部页面”调整挂接，或在菜单管理移动子菜单。</div>
+        </section>
+
+        <section class="chapter" id="pages"><div class="chapter-head"><span class="number">05</span><h2>全部页面与版本</h2></div>
+          <p>“全部页面”集中管理当前账号的所有已发布页面，可按标题搜索，也能从卡片进入页面、修改标题或菜单、发布新版本、查看版本记录、进入文件管理、复制访问链接、分享或下架页面。</p>
+          <figure class="shot"><img src="assets/pages.png" alt="全部页面卡片列表"><figcaption>全部页面：搜索并从每张页面卡片的操作菜单进入管理功能。</figcaption></figure>
+          <figure class="shot shot-dialog"><img src="assets/page-info.png" alt="修改页面标题和菜单挂接位置"><figcaption>修改信息中的菜单选择会展示完整父级路径。选择有子菜单的节点时，将当前末级菜单移到该父级下面；选择空闲的末级菜单时直接挂接页面。</figcaption></figure>
+          <figure class="shot shot-dialog"><img src="assets/versions.png" alt="页面的多版本记录"><figcaption>版本记录显示上传时间、上传者和大小；可以回滚或彻底删除历史版本。</figcaption></figure>
+          <h3>页面预览</h3><p>点卡片进入页面。租户管理员为整个租户配置“框架内显示”或“框架外打开”；框架内模式在工作台内嵌入页面，框架外模式在新标签打开。外框架访问仍要取得授权，不能当成永久免登录公开链接。个人设置可调整自己框架外预览授权的有效分钟数。</p>
+          <h3>分享菜单</h3><p>菜单下至少有一个可分享页面时，可从菜单卡片上的“分享”打开分享设置。一个菜单有多个页面时，可指定本次要分享的页面。公开链接可发给任何持有人；指定账号分享只授权选定账号。</p>
+        </section>
+
+        <section class="chapter" id="files"><div class="chapter-head"><span class="number">06</span><h2>文件管理与存储空间</h2></div>
+          <p>文件管理列出已上传文件、页面版本、上传者、文件大小、时间及菜单挂接路径。左侧目录显示文件夹占用；目录大小包含其下级目录和保留的所有版本。上传 ZIP 后可查看内部文件清单。</p>
+          <figure class="shot"><img src="assets/files.png" alt="文件管理列表、文件大小、菜单挂接和下载操作"><figcaption>文件管理显示上传文件、版本、挂接状态、大小和日期；可下载原件或选择多个文件批量下载。</figcaption></figure>
+          <h3>下载、删除与空间配额</h3><ul><li>“下载原件”下载当前上传文件；勾选多条后可批量下载（每批最多 100 个、总大小最多 2 GB）。</li><li>历史版本可单独删除；当前版本不能作为历史版本删除。版本清理提交后台任务，完成后才释放占用。</li><li>“下架页面”仅让页面停止访问；文件和全部历史版本仍被保留并继续计入空间。</li><li>“彻底删除页面及文件”会使页面链接失效并清理该页面所有版本。删除不可撤销，清理完成后才归还配额。</li></ul>
+          <figure class="shot"><img src="assets/file-entries.png" alt="ZIP 内部文件清单及文件大小"><figcaption>文件清单可按路径筛选，并显示版本内部各文件的相对路径和大小。</figcaption></figure>
+          <figure class="shot"><img src="assets/cleanup.png" alt="文件清理任务及执行结果"><figcaption>异步清理进度和失败原因在“清理任务”中查看；失败任务可重试。</figcaption></figure>
+          <div class="tip"><b>配额查看：</b>账号菜单和“空间设置”显示剩余空间、已用空间和账号配额。平台超级管理员设置每个账号的配额；同一租户内的账号各自计算自己的上传配额。</div>
+        </section>
+
+        <section class="chapter" id="history"><div class="chapter-head"><span class="number">07</span><h2>上传记录</h2></div>
+          <p>上传记录用于追踪原始 HTML 或 ZIP 的解析任务，包含文件名、状态、大小、文件状态、处理结果和上传时间。正在排队或解析的任务会自动刷新；失败时查看“处理结果”中的具体原因。上传成功后可从该记录跳到对应页面的文件管理。</p>
+          <figure class="shot"><img src="assets/uploads.png" alt="上传任务和解析结果"><figcaption>上传记录显示解析状态和失败原因；成功记录提供进入文件管理的入口。</figcaption></figure>
+        </section>
+
+        <section class="chapter" id="bookmarks"><div class="chapter-head"><span class="number">08</span><h2>网站收藏</h2></div>
+          <p>网站收藏用于保存外部网站链接，与页面菜单分开管理。可新建、修改、删除收藏，选择一个平级收藏分类，搜索、排序、拖动换序，并下载收藏清单。这里只显示外链收藏分类，不显示 PageHub 的页面菜单分类。</p>
+          <figure class="shot"><img src="assets/bookmarks.png" alt="网站收藏卡片、分类和快捷操作"><figcaption>网站收藏：分类入口和新增操作固定在工具栏中，不随分类数量移动。</figcaption></figure>
+          <figure class="shot shot-dialog"><img src="assets/bookmark-form.png" alt="新增网站收藏名称地址分类和打开方式"><figcaption>收藏网址并可设为新标签打开，或尝试在框架内打开。</figcaption></figure>
+          <figure class="shot shot-dialog"><img src="assets/bookmark-categories.png" alt="管理网站收藏平级分类"><figcaption>收藏分类是独立的平级分类，可改名、排序或删除。</figcaption></figure>
+          <figure class="shot"><img src="assets/bookmarks-list.png" alt="网站收藏列表视图"><figcaption>列表视图便于核对完整网址、分类、打开方式和收藏时间。</figcaption></figure>
+          <p>部分网站会通过响应头拒绝被嵌入，或要求在原网站登录。在框架内显示空白、拒绝连接或登录不正常时，使用卡片里的新标签页打开入口。PageHub 只能保存收藏信息，不能替外部网站进行身份验证。</p>
+        </section>
+
+        <section class="chapter" id="shares"><div class="chapter-head"><span class="number">09</span><h2>我的分享与共享给我</h2></div>
+          <p>菜单或页面卡片上的“分享”可以建立公开链接，或将页面指定给一个 PageHub 账号；页面分享固定对应创建时选择的页面版本。</p>
+          <figure class="shot shot-dialog"><img src="assets/share-public.png" alt="创建或撤销公开页面分享"><figcaption>公开链接允许任何取得链接的人预览。链接有有效期，也可以随时撤销。</figcaption></figure>
+          <figure class="shot shot-dialog"><img src="assets/share-account.png" alt="将页面分享给指定账号"><figcaption>指定账号通过用户名、姓名或完整手机号选择接收人。此分享不会产生匿名访问链接。</figcaption></figure>
+          <dl class="terms"><dt>我的分享</dt><dd>查看页面、分享方式、接收账号、分享时间、有效期和状态；可复制有效公开链接、撤销访问，或删除列表记录。</dd><dt>共享给我</dt><dd>接收账号登录后，在“共享给我”打开页面。可以将记录从自己的列表移除，不会删除分享者的页面。</dd><dt>过期/撤销</dt><dd>过期或撤销后无法再访问；永久有效的分享仍可由分享者随时撤销。</dd></dl>
+          <figure class="shot"><img src="assets/my-shares.png" alt="我的分享列表"><figcaption>我的分享：查看状态、时间、接收人以及撤销或删除操作。</figcaption></figure>
+          <figure class="shot"><img src="assets/received-shares.png" alt="共享给我的页面列表"><figcaption>共享给我：指定账号登录后在这里访问收到的页面。</figcaption></figure>
+          <div class="tip warn"><b>分享范围：</b>公开链接不要求登录，不能转发给不应访问的人；指定账号分享只对被选定并登录的账号生效。分享失效只影响访问权限，不删除原页面。</div>
+        </section>
+
+        <section class="chapter" id="mcp"><div class="chapter-head"><span class="number">10</span><h2>智能体与 MCP</h2></div>
+          <p>MCP 让支持 MCP 的智能体读取菜单和页面，也可在读写凭证授权下上传 HTML/ZIP、按路径创建菜单、查询上传任务及页面链接。配置入口独立位于工作台顶部的“MCP 接入”。</p>
+          <figure class="shot"><img src="assets/mcp.png" alt="MCP 接入配置及复制给智能体入口"><figcaption>MCP 配置文本包含连接地址、认证请求头和发布规则。创建凭证按钮旁边是“复制给智能体”。</figcaption></figure>
+          <ol class="steps"><li>给凭证起一个可辨认的名称。发布页面需要读写权限；只读凭证不能上传或创建菜单。</li><li>选择“创建凭证”。新凭证令牌只在创建后显示一次。</li><li>确认正文中的 Authorization 请求头自动使用新令牌，再选择“复制给智能体”，把配置和指令交给受信任的智能体。</li><li>让智能体按用户意图调用上传工具。它应先查菜单、上传 HTML/ZIP，并等待解析任务状态为成功，再返回页面标题和访问链接。</li><li>不再使用的凭证可以删除/撤销；旧凭证立即失效。凭证默认有效期 90 天。</li></ol>
+          <div class="tip warn"><b>凭证保护：</b>Bearer 令牌相当于账号访问凭证。只发送给你信任的智能体，不要放进公开文档、聊天群或截图。凭证不会再次显示；丢失后创建新凭证并删除旧凭证。</div>
+          <p>如果智能体提示菜单不能挂接，请在菜单管理中创建空闲末级菜单，或让智能体使用新的菜单名称。父级菜单有子菜单、或已有页面的末级菜单都不能再接另一个页面。</p>
+        </section>
+
+        <section class="chapter" id="settings"><div class="chapter-head"><span class="number">11</span><h2>空间与个人设置</h2></div>
+          <p>右上角“工作台设置”打开工作空间各功能；紧邻其右侧的问号图标打开本帮助。账号菜单可查看剩余空间、进入账号与空间设置、修改密码和退出。</p>
+          <figure class="shot"><img src="assets/workbench.png" alt="工作台设置菜单与各功能入口"><figcaption>工作台设置统一收纳常用功能；帮助图标在设置按钮右边。</figcaption></figure>
+          <figure class="shot"><img src="assets/account-menu.png" alt="显示剩余存储空间的账号菜单"><figcaption>账号菜单显示剩余存储空间，并提供个人设置、修改密码和退出入口。</figcaption></figure>
+          <figure class="shot"><img src="assets/settings.png" alt="租户菜单布局，空间容量和个人界面主题设置"><figcaption>空间设置：查看存储用量、导航方式、主题和账号安全。</figcaption></figure>
+          <figure class="shot"><img src="assets/settings-external.png" alt="框架外页面打开及个人授权时长"><figcaption>选择框架外打开后，个人可设置自己获取页面访问授权的有效期。</figcaption></figure>
+          <dl class="terms"><dt>全租户共用</dt><dd>导航布局（左侧/顶部/平铺）及页面打开方式由租户管理员配置，该空间内的用户共享这些设置。</dd><dt>个人设置</dt><dd>浅色/深色主题、平铺目录紧凑/列表视图，以及本人框架外访问授权有效分钟数。</dd><dt>存储空间</dt><dd>按当前账号的用量与配额单独统计。历史版本会继续占空间，清理任务完成后才释放。</dd></dl>
+          <p>框架外授权时长只用于获取页面的短期访问授权。页面链接仍受账号会话保护；它不是永久公开分享。若需匿名预览，请创建并妥善管理公开分享链接。</p>
+          <figure class="shot shot-dialog"><img src="assets/password.png" alt="修改当前账号密码"><figcaption>修改密码：填写原密码和至少 10 位的新密码。</figcaption></figure>
+        </section>
+
+        <section class="chapter" id="faq"><div class="chapter-head"><span class="number">12</span><h2>常见问题</h2></div>
+          <h3>上传成功了，菜单里没有显示页面</h3><p>检查上传记录是否为“已发布”，并检查上传路径末级菜单有没有被隐藏。若目标路径的父级菜单不可见，整个分支也不会出现在导航中。</p>
+          <h3>为什么二级菜单不能挂页面？</h3><p>若它已经有子菜单，它是父节点，页面应挂到下一级空闲节点；如果没有子菜单，它可以作为末级节点挂一个页面。一级菜单同样遵循这个规则。</p>
+          <h3>下架后空间没有变小</h3><p>下架保留页面文件和版本以便恢复或审计。需要释放空间时，进入文件管理彻底删除历史版本，或彻底删除页面及其全部文件，然后等待清理任务完成。</p>
+          <h3>收藏的网站显示页面不存在或空白</h3><p>检查收藏网址是否有效。外部网站可能禁止被嵌入；在收藏页尝试新标签页打开。访问权限和登录由外部网站控制。</p>
+          <h3>MCP 上传没有成功</h3><p>检查令牌是否有效且有读写权限；让智能体轮询上传任务到最终状态，并检查具体错误。菜单已经挂页面或是仍含子菜单的父级时，须指定空闲的末级菜单。</p>
+          <h3>框架外页面无法打开</h3><p>先登录工作台，再从页面入口打开以刷新授权。授权到期后回工作空间重新打开。若想让未登录者预览，应使用公开分享，而不是普通页面访问地址。</p>
+          <h3>验证码收不到</h3><p>当前开发环境不会发短信，验证码会显示在注册表单附近的提示中；这个功能不能证明手机号已经接收短信。</p>
+          <div class="tip">如果菜单、页面或空间配额仍有问题，请把页面标题、上传时间和任务失败原因提供给平台超级管理员排查。不要向他人发送 MCP 凭证或公开分享链接。</div>
+        </section>
+      </div>
+      <footer class="footer">PageHub 普通用户使用帮助 · 如界面更新，以当前工作台显示为准。</footer>
+    </main>
+  </div>
+  <script>
+    const button = document.getElementById('toggle-nav')
+    const sidebar = document.getElementById('sidebar')
+    button.addEventListener('click', () => {
+      const open = sidebar.classList.toggle('open')
+      button.setAttribute('aria-expanded', String(open))
+    })
+    sidebar.addEventListener('click', event => {
+      if (event.target.closest('a') && innerWidth <= 680) {
+        sidebar.classList.remove('open')
+        button.setAttribute('aria-expanded', 'false')
+      }
+    })
+    const links = [...sidebar.querySelectorAll('a')]
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) {
+        links.forEach(link => link.classList.toggle('active', link.hash === '#' + entry.target.id))
+      }
+    }, { rootMargin: '-15% 0px -75% 0px' })
+    document.querySelectorAll('.chapter[id]').forEach(section => observer.observe(section))
+  </script>
+</body>
+</html>
