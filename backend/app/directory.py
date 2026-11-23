@@ -22,7 +22,8 @@ def catalogue(q: str = Query('', max_length=200), category: uuid.UUID | None = N
               page: int = Query(1, ge=1), size: int = Query(48, ge=1, le=100), user=Depends(current_user)):
     prefix = TREE + ''', entries AS (
         SELECT t.*,count(p.id) AS page_count,min(p.id::text) AS single_page_id,
-            min(p.title) AS single_page_title,max(coalesce(v.created_at,p.created_at)) AS updated_at
+            min(p.title) AS single_page_title,max(p.created_at) AS published_at,
+            max(coalesce(v.created_at,p.created_at)) AS updated_at
         FROM tree t LEFT JOIN pages p ON p.menu_id=t.id AND p.tenant_id=t.tenant_id AND p.deleted_at IS NULL
         LEFT JOIN page_versions v ON v.id=p.current_version AND v.tenant_id=t.tenant_id
         LEFT JOIN (SELECT parent_id FROM menus WHERE tenant_id=%s AND parent_id IS NOT NULL GROUP BY parent_id) branch ON branch.parent_id=t.id

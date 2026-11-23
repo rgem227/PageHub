@@ -111,6 +111,44 @@ CREATE TABLE IF NOT EXISTS mcp_credentials (
     expires_at timestamptz NOT NULL DEFAULT now()+interval '90 days',
     last_used_at timestamptz, created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE mcp_credentials ALTER COLUMN expires_at DROP NOT NULL;
+ALTER TABLE mcp_credentials ALTER COLUMN expires_at DROP DEFAULT;
+CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id text PRIMARY KEY, client_name text NOT NULL, redirect_uris text[] NOT NULL,
+    token_endpoint_auth_method text NOT NULL DEFAULT 'none' CHECK (token_endpoint_auth_method='none'),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
+    code_hash text PRIMARY KEY, client_id text NOT NULL REFERENCES oauth_clients ON DELETE CASCADE,
+    tenant_id uuid NOT NULL REFERENCES tenants ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
+    redirect_uri text NOT NULL, scopes text[] NOT NULL, resource text NOT NULL,
+    code_challenge text NOT NULL, code_challenge_method text NOT NULL CHECK (code_challenge_method='S256'),
+    expires_at timestamptz NOT NULL, authorization_expires_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS oauth_grants (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL REFERENCES tenants ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
+    client_id text NOT NULL REFERENCES oauth_clients ON DELETE CASCADE,
+    scopes text[] NOT NULL, expires_at timestamptz, revoked_at timestamptz,
+    last_used_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+    token_hash text PRIMARY KEY, tenant_id uuid NOT NULL, grant_id uuid NOT NULL,
+    expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id,grant_id) REFERENCES oauth_grants(tenant_id,id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+    token_hash text PRIMARY KEY, tenant_id uuid NOT NULL, grant_id uuid NOT NULL,
+    expires_at timestamptz, consumed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id,grant_id) REFERENCES oauth_grants(tenant_id,id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS oauth_codes_expiry ON oauth_authorization_codes(expires_at);
+CREATE INDEX IF NOT EXISTS oauth_grants_user ON oauth_grants(tenant_id,user_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS oauth_access_grant ON oauth_access_tokens(tenant_id,grant_id,expires_at);
+CREATE INDEX IF NOT EXISTS oauth_refresh_grant ON oauth_refresh_tokens(tenant_id,grant_id);
 CREATE TABLE IF NOT EXISTS audit_logs (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants,
     user_id uuid NOT NULL REFERENCES users, action text NOT NULL, detail jsonb NOT NULL,
@@ -241,7 +279,7 @@ CREATE INDEX IF NOT EXISTS versions_manifest_pending ON page_versions(created_at
 
 -- tenant_id 来自事务上下文；普通连接无上下文时默认不可见。
 DO $$ DECLARE t text; BEGIN
-    FOREACH t IN ARRAY ARRAY['menus','pages','page_versions','page_shares','uploads','mcp_credentials','audit_logs','file_deletions','bookmarks','bookmark_categories'] LOOP
+    FOREACH t IN ARRAY ARRAY['menus','pages','page_versions','page_shares','uploads','mcp_credentials','oauth_authorization_codes','oauth_grants','oauth_access_tokens','oauth_refresh_tokens','audit_logs','file_deletions','bookmarks','bookmark_categories'] LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',t);
         IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename=t AND policyname='tenant_isolation') THEN

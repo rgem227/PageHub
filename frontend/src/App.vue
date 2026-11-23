@@ -34,6 +34,19 @@ const authRules = computed<FormRules>(() => ({
 const developmentCode = ref('')
 const developmentCodeLabel = ref('本地开发验证码')
 const routeParams = new URLSearchParams(location.search)
+const oauthEncoded = routeParams.get('oauth_request')
+function decodeOAuthRequest(value: string | null) {
+  if (!value) return null
+  try {
+    const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4))
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0))))
+  } catch { return null }
+}
+const oauthRequest = ref<any>(decodeOAuthRequest(oauthEncoded))
+const oauthInfo = ref<any>(null)
+const oauthError = ref(oauthEncoded && !oauthRequest.value ? 'OAuth 授权请求格式无效，请从智能体客户端重新发起。' : '')
+const oauthExpiry = ref<number | null>(90)
+const oauthBusy = ref(false)
 const section = ref(routeParams.get('view') || 'overview')
 const filePage = ref(routeParams.get('file_page') || '')
 const workbenchOpen = ref(false)
@@ -71,6 +84,10 @@ const versionPage = ref<any>(null)
 const freshToken = ref('')
 const freshCredentialId = ref('')
 const mcpUrl = ref('')
+const oauthMetadataUrl = ref('')
+const oauthResourceMetadataUrl = ref('')
+const oauthTokenUrl = ref('')
+const oauthGrants = ref<any[]>([])
 const mcpConfig = computed(() => JSON.stringify({ mcpServers: { 'page-hub': {
   url: mcpUrl.value, headers: { Authorization: 'Bearer ' + (freshToken.value || '<创建凭证后自动填入>') },
 } } }, null, 2))
@@ -86,13 +103,16 @@ const mcpAgentPrompt = computed(() => [
   '6. 上传工具返回任务 ID 后，调用 get_upload_status 轮询到 success 或 failed。成功时使用结果中的最终 menu_path 和 menu_path_auto_extended，并在自动延伸菜单路径后调用 list_menus 确认新末级菜单；再调用 get_page_url 获取最终链接，返回标题、完整菜单路径和访问链接。失败时如实说明 error，不要声称发布成功。',
   '7. 上传需要读写凭证；只读凭证不能上传页面或创建菜单。',
   '',
+  'OAuth 2.1：支持动态客户端注册、授权码 + PKCE S256 和 refresh token 轮换。支持 OAuth 的 MCP 客户端可使用 MCP URL 自动发现授权信息；用户网页登录并同意后，客户端应自动刷新 access token 并保存轮换后的 refresh token，无需将 refresh token 交给模型。授权有效期可选 7、30、90、180、365 天或永久；永久授权直到用户撤销、账号停用或租户停用。scope 未提供时默认申请 read write；客户端显式申请 read 时为只读，read write 为读写；用户确认页会显示申请权限。授权服务发现地址：' + oauthMetadataUrl.value,
+  'OAuth access token 有效 3600 秒。令牌端点：' + oauthTokenUrl.value + '。客户端续期时以 application/x-www-form-urlencoded POST grant_type=refresh_token、client_id 和当前 refresh_token；必须保存响应中新的 refresh_token，旧 refresh token 只能使用一次，重复使用会撤销该授权。响应会返回 expires_in 和 authorization_expires_at。',
+  '',
   '将下面的 MCP 配置添加到智能体支持的 MCP 客户端：',
   '',
   '```json',
   mcpConfig.value,
   '```',
 ].join('\n'))
-const credentialForm = reactive({ name: '', readonly: false })
+const credentialForm = reactive({ name: '', readonly: false, expires_in_days: 90 as number | null })
 const passwordDialog = ref(false)
 const passwordForm = reactive({ old_password: '', new_password: '' })
 const menuDialog = ref(false)
@@ -301,7 +321,14 @@ async function navigate(id: string, pageId = '') {
 }
 async function loadSection() {
   await attempt(async () => {
-    if (section.value === 'mcp') { const result = await Promise.all([api('/credentials'), api('/mcp/config')]); credentials.value = result[0]; mcpUrl.value = result[1].url }
+    if (section.value === 'mcp') {
+      const result = await Promise.all([api('/credentials'), api('/mcp/config'), api('/oauth/grants')])
+      credentials.value = result[0]; mcpUrl.value = result[1].url
+      oauthMetadataUrl.value = result[1].authorization_server_metadata_url
+      oauthResourceMetadataUrl.value = result[1].protected_resource_metadata_url
+      oauthTokenUrl.value = result[1].token_endpoint_url
+      oauthGrants.value = result[2]
+    }
     if (section.value === 'shares') myShares.value = await api('/shares')
     if (section.value === 'received-shares') receivedShares.value = await api('/shares/received')
   })
@@ -352,10 +379,38 @@ function changePage(value: number) { pageIndex.value = value; syncRoute(true); v
 async function authenticated(account: any, signingIn = false) {
   user.value = account; theme(account.theme)
   if (account.must_change_password) { passwordDialog.value = true; return }
+  if (oauthRequest.value) { await loadOAuthRequest(); return }
   sendPresenceHeartbeat()
-  if (signingIn && !['page', 'bookmark', 'received_share'].some(key => new URLSearchParams(location.search).has(key))) history.replaceState(null, '', location.pathname)
+  if (signingIn && !oauthRequest.value && !['page', 'bookmark', 'received_share'].some(key => new URLSearchParams(location.search).has(key))) history.replaceState(null, '', location.pathname)
   await refresh()
   await restoreRoute()
+}
+async function loadOAuthRequest() {
+  if (!oauthRequest.value || !user.value || user.value.must_change_password) return
+  oauthBusy.value = true; oauthError.value = ''
+  try {
+    const query = new URLSearchParams(oauthRequest.value).toString()
+    oauthInfo.value = await api('/oauth/authorize/details?' + query)
+  } catch (error) { oauthError.value = error instanceof Error ? error.message : '无法读取 OAuth 授权请求' }
+  oauthBusy.value = false
+}
+async function approveOAuth() {
+  if (!oauthRequest.value) return
+  oauthBusy.value = true
+  await attempt(async () => {
+    const result = await api('/oauth/authorize', json('POST', { ...oauthRequest.value, expires_in_days: oauthExpiry.value }))
+    location.assign(result.redirect_uri)
+  })
+  oauthBusy.value = false
+}
+async function denyOAuth() {
+  if (!oauthRequest.value) { location.assign('/'); return }
+  oauthBusy.value = true
+  await attempt(async () => {
+    const result = await api('/oauth/authorize/deny', json('POST', oauthRequest.value))
+    location.assign(result.redirect_uri)
+  })
+  oauthBusy.value = false
 }
 async function submitAuth() {
   if (!await authForm.value?.validate().catch(() => false)) return
@@ -569,6 +624,13 @@ async function createCredential() {
   await attempt(async () => { const r = await api('/credentials', json('POST', credentialForm)); freshToken.value = r.token; freshCredentialId.value = r.id; credentials.value = await api('/credentials'); credentialForm.name = '' })
 }
 async function removeCredential(id: string) { await attempt(async () => { await ElMessageBox.confirm('删除后该凭证立即失效，凭证记录将被永久移除。此操作无法撤销。', '删除 MCP 凭证', { type: 'warning', confirmButtonText: '永久删除', cancelButtonText: '取消' }); await api('/credentials/' + id, json('DELETE')); if (freshCredentialId.value === id) { freshToken.value = ''; freshCredentialId.value = '' } credentials.value = await api('/credentials') }) }
+async function revokeOAuthGrant(row: any) {
+  await attempt(async () => {
+    await ElMessageBox.confirm('撤销后，此应用的 access token 和 refresh token 会立即失效。', '撤销 OAuth 授权', { type: 'warning', confirmButtonText: '撤销授权', cancelButtonText: '取消' })
+    await api('/oauth/grants/' + row.id, json('DELETE'))
+    oauthGrants.value = await api('/oauth/grants')
+  })
+}
 async function changePassword() {
   await attempt(async () => { await api('/auth/password', json('POST', passwordForm)); passwordDialog.value = false; user.value.must_change_password = false; passwordForm.old_password = ''; passwordForm.new_password = ''; await refresh(); ElMessage.success('密码已修改，原 MCP 凭证已撤销') })
 }
@@ -608,6 +670,7 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (presenceTimer) clearInt
       </div><small>统一页面 · 独立空间 · 智能体直连</small>
     </section>
     <section class="auth-panel"><div class="auth-form"><span class="eyebrow">YOUR WORKSPACE</span><h2>{{ authTab === 'login' ? '欢迎回来' : '创建你的工作空间' }}</h2><p class="muted">{{ authTab === 'login' ? '登录后，继续管理你的页面与工具。' : '填写账号信息并完成验证码，即可创建独立工作空间。' }}</p>
+      <el-alert v-if="oauthRequest" title="智能体正在请求 OAuth 授权。登录后可查看它申请的权限和有效期；你也可以取消本次授权。" type="info" :closable="false" show-icon />
       <el-tabs v-model="authTab"><el-tab-pane label="登录" name="login" /><el-tab-pane label="注册" name="register" /></el-tabs>
       <el-form ref="authForm" :model="auth" :rules="authRules" label-position="top" @submit.prevent="submitAuth">
         <el-form-item v-if="authTab === 'login'" key="login-account" label="用户名 / 手机号" prop="account"><el-input v-model="auth.account" size="large" autocomplete="username" placeholder="请输入账号" /></el-form-item>
@@ -620,7 +683,28 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (presenceTimer) clearInt
         <el-form-item label="密码" prop="password"><el-input v-model="auth.password" type="password" show-password size="large" :autocomplete="authTab === 'login' ? 'current-password' : 'new-password'" placeholder="至少 10 位字符" /></el-form-item>
         <el-form-item v-if="authTab === 'register'" label="确认密码" prop="confirm"><el-input v-model="auth.confirm" type="password" show-password size="large" autocomplete="new-password" placeholder="再次输入密码" /></el-form-item>
         <el-button type="primary" size="large" class="wide" native-type="submit" :loading="busy">{{ authTab === 'login' ? '登录工作空间' : '注册并立即使用' }} <el-icon class="button-arrow"><ArrowRight /></el-icon></el-button>
-      </el-form><p class="auth-note">每个账号拥有独立租户，页面与数据彼此隔离。</p>
+      </el-form><div class="inline"><p class="auth-note">每个账号拥有独立租户，页面与数据彼此隔离。</p><el-button v-if="oauthRequest" text @click="denyOAuth">取消授权</el-button></div>
+    </div></section>
+  </main>
+
+  <main v-else-if="oauthRequest" class="auth-shell oauth-shell">
+    <section class="auth-story">
+      <div class="brand"><img class="brand-symbol" src="/pagehub.svg" alt="如" /><span class="brand-wordmark">PAGE HUB</span></div>
+      <div class="story-content"><span class="eyebrow">SECURE MCP AUTHORIZATION</span><h1>让智能体按需访问，<br>授权清晰可控。</h1><p>OAuth 2.1 授权码 + PKCE。访问令牌短期有效，客户端可自动续期。</p>
+        <div class="story-card"><el-icon :size="24"><Connection /></el-icon><div><b>你始终可以撤销授权</b><span>在 MCP 接入页查看应用并随时终止访问</span></div><el-icon><ArrowRight /></el-icon></div>
+      </div><small>PageHub · MCP OAuth 2.1</small>
+    </section>
+    <section class="auth-panel"><div class="auth-form"><span class="eyebrow">OAUTH CONSENT</span><h2>授权智能体访问 PageHub</h2>
+      <el-alert v-if="oauthError" :title="oauthError" type="error" :closable="false" show-icon />
+      <el-alert v-else-if="user.must_change_password" title="请先完成密码修改，再继续 OAuth 授权。" type="warning" :closable="false" show-icon />
+      <el-skeleton v-else-if="oauthBusy || !oauthInfo" :rows="4" animated />
+      <template v-else>
+        <div class="oauth-client"><span class="document-icon"><el-icon :size="22"><Connection /></el-icon></span><div><b>{{ oauthInfo.client_name }}</b><small>当前账号：{{ oauthInfo.account }}</small></div></div>
+        <div class="oauth-permissions"><b>申请权限</b><div v-for="scope in oauthInfo.scopes" :key="scope"><el-tag size="small" type="success">{{ scope === 'read' ? '读取' : '写入' }}</el-tag><span>{{ scope === 'read' ? '读取菜单、页面和上传状态' : '上传页面、创建菜单及管理收藏' }}</span></div></div>
+        <el-form label-position="top"><el-form-item label="授权有效期"><el-select v-model="oauthExpiry" style="width:100%"><el-option :value="7" label="7 天"/><el-option :value="30" label="30 天"/><el-option :value="90" label="90 天（默认）"/><el-option :value="180" label="180 天"/><el-option :value="365" label="1 年"/><el-option :value="null" label="永久，直到手动撤销或账号停用"/></el-select></el-form-item></el-form>
+        <el-alert title="Access token 每小时更新。兼容的 MCP 客户端会自动使用刷新令牌续期并保存轮换后的令牌，模型无需接触刷新令牌。" type="info" :closable="false" />
+      </template>
+      <div class="inline oauth-actions"><el-button @click="denyOAuth">拒绝</el-button><el-button v-if="oauthInfo && !oauthError && !user.must_change_password" type="primary" :loading="oauthBusy" @click="approveOAuth">同意并连接</el-button></div>
     </div></section>
   </main>
 
@@ -672,7 +756,24 @@ onUnmounted(() => { if (timer) clearInterval(timer); if (presenceTimer) clearInt
           <FileManager v-if="section === 'files'" :page-id="filePage" :refresh-key="workspace" @changed="refresh" @focus="filePage = $event; syncRoute(true)" />
           <section v-if="section === 'shares'" class="panel"><el-table :data="myShares" row-key="id" empty-text="你还没有创建分享"><el-table-column prop="title" label="页面" min-width="150"/><el-table-column prop="menu_name" label="菜单" min-width="100"/><el-table-column label="分享方式" width="105"><template #default="{ row }">{{ row.share_type === 'account' ? '账号分享' : '公开链接' }}</template></el-table-column><el-table-column label="接收账号" min-width="150"><template #default="{ row }">{{ row.share_type === 'account' ? (row.recipient_name || row.recipient_username) + '（' + row.recipient_username + '）' : '持有链接者' }}</template></el-table-column><el-table-column label="分享时间" min-width="165"><template #default="{ row }">{{ date(row.created_at) }}</template></el-table-column><el-table-column label="有效期" min-width="130"><template #default="{ row }">{{ row.expires_at ? date(row.expires_at) : '永久' }}</template></el-table-column><el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="['有效','永久有效'].includes(row.status) ? 'success' : row.status === '已过期' ? 'warning' : row.status === '页面不可用' ? 'danger' : 'info'">{{ row.status }}</el-tag></template></el-table-column><el-table-column label="操作" width="220" fixed="right"><template #default="{ row }"><el-button v-if="row.url" text @click="copy(row.url)">复制链接</el-button><el-button v-if="['有效','永久有效'].includes(row.status)" text type="danger" @click="revokeShare(row)">撤销</el-button><el-button text type="danger" @click="deleteShare(row)">删除</el-button></template></el-table-column></el-table></section>
           <section v-if="section === 'received-shares'" class="panel"><el-table :data="receivedShares" row-key="id" empty-text="还没有收到页面分享"><el-table-column prop="title" label="页面" min-width="170"/><el-table-column label="分享人" min-width="160"><template #default="{ row }">{{ row.sender_name || row.sender_username }}（{{ row.sender_username }}）</template></el-table-column><el-table-column label="分享时间" min-width="170"><template #default="{ row }">{{ date(row.created_at) }}</template></el-table-column><el-table-column label="有效期" min-width="135"><template #default="{ row }">{{ row.expires_at ? date(row.expires_at) : '永久' }}</template></el-table-column><el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="['有效','永久有效'].includes(receivedStatus(row)) ? 'success' : receivedStatus(row) === '已过期' ? 'warning' : 'info'">{{ receivedStatus(row) }}</el-tag></template></el-table-column><el-table-column label="操作" width="150" fixed="right"><template #default="{ row }"><el-button text type="primary" :disabled="receivedStatus(row) !== '有效' && receivedStatus(row) !== '永久有效'" @click="openReceivedShare(row)">打开</el-button><el-button text @click="removeReceivedShare(row)">移除</el-button></template></el-table-column></el-table></section>
-          <section v-if="section === 'mcp'" class="panel"><h2>连接你的智能体</h2><p class="muted">创建读写凭证后，复制文本框内容并发送给智能体；内容包含上传规则和 MCP 连接配置。</p><el-input class="mcp-agent-prompt" type="textarea" :model-value="mcpAgentPrompt" :autosize="{ minRows: 18, maxRows: 32 }" readonly aria-label="智能体操作说明与 MCP 配置" /><el-alert v-if="freshToken" class="mcp-token-warning" title="内容包含 MCP 凭证，请只发送给可信的智能体。刷新页面后需重新创建凭证。" type="warning" :closable="false" /><el-form inline><el-form-item label="凭证名称" required><el-input v-model="credentialForm.name" placeholder="例如：我的智能体" /></el-form-item><el-form-item><el-checkbox v-model="credentialForm.readonly">只读权限</el-checkbox></el-form-item><el-form-item><el-button type="primary" @click="createCredential">创建凭证</el-button></el-form-item><el-form-item><el-button :disabled="!freshToken" @click="copy(mcpAgentPrompt)">复制给智能体</el-button></el-form-item></el-form><el-table :data="credentials"><el-table-column prop="name" label="名称" /><el-table-column label="权限"><template #default="{ row }">{{ row.scopes.includes('write') ? '读写' : '只读' }}</template></el-table-column><el-table-column label="到期时间"><template #default="{ row }">{{ date(row.expires_at) }}</template></el-table-column><el-table-column label="状态"><template #default="{ row }">{{ row.active ? '启用' : '已撤销' }}</template></el-table-column><el-table-column label="操作"><template #default="{ row }"><el-button v-if="row.active" text type="danger" @click="removeCredential(row.id)">删除</el-button></template></el-table-column></el-table></section>
+          <section v-if="section === 'mcp'" class="panel">
+            <h2>连接你的智能体</h2><p class="muted">手动凭证适用于直接配置 Bearer token 的客户端；OAuth 适用于支持 MCP OAuth 的客户端。</p>
+            <el-input class="mcp-agent-prompt" type="textarea" :model-value="mcpAgentPrompt" :autosize="{ minRows: 18, maxRows: 32 }" readonly aria-label="智能体操作说明与 MCP 配置" />
+            <el-alert v-if="freshToken" class="mcp-token-warning" title="内容包含 MCP 凭证，请只发送给可信的智能体。刷新页面后需重新创建凭证。" type="warning" :closable="false" />
+            <el-form inline>
+              <el-form-item label="凭证名称" required><el-input v-model="credentialForm.name" placeholder="例如：我的智能体" /></el-form-item>
+              <el-form-item><el-checkbox v-model="credentialForm.readonly">只读权限</el-checkbox></el-form-item>
+              <el-form-item label="有效期"><el-select v-model="credentialForm.expires_in_days" style="width:115px"><el-option :value="7" label="7 天"/><el-option :value="30" label="30 天"/><el-option :value="90" label="90 天"/><el-option :value="180" label="180 天"/><el-option :value="365" label="1 年"/><el-option :value="null" label="永久"/></el-select></el-form-item>
+              <el-form-item><el-button type="primary" @click="createCredential">创建凭证</el-button></el-form-item>
+              <el-form-item><el-button :disabled="!freshToken" @click="copy(mcpAgentPrompt)">复制给智能体</el-button></el-form-item>
+            </el-form>
+            <el-table :data="credentials"><el-table-column prop="name" label="名称"/><el-table-column label="权限"><template #default="{ row }">{{ row.scopes.includes('write') ? '读写' : '只读' }}</template></el-table-column><el-table-column label="到期时间"><template #default="{ row }">{{ row.expires_at ? date(row.expires_at) : '永久' }}</template></el-table-column><el-table-column label="状态"><template #default="{ row }"><el-tag :type="!row.active ? 'info' : row.expires_at && new Date(row.expires_at) <= new Date() ? 'warning' : 'success'">{{ !row.active ? '已撤销' : row.expires_at && new Date(row.expires_at) <= new Date() ? '已过期' : '启用' }}</el-tag></template></el-table-column><el-table-column label="操作"><template #default="{ row }"><el-button v-if="row.active" text type="danger" @click="removeCredential(row.id)">删除</el-button></template></el-table-column></el-table>
+          </section>
+          <section v-if="section === 'mcp'" class="panel oauth-grants-panel">
+            <div class="section-heading"><div><h2>OAuth 2.1 授权</h2><p class="muted">客户端通过发现文档注册并请求授权；授权有效期由你在浏览器确认，refresh token 自动轮换。</p></div></div>
+            <div class="oauth-discovery"><span>授权服务发现</span><code>{{ oauthMetadataUrl }}</code><span>保护资源元数据</span><code>{{ oauthResourceMetadataUrl }}</code><span>令牌及自动刷新端点</span><code>{{ oauthTokenUrl }}</code></div>
+            <el-table :data="oauthGrants" empty-text="还没有 OAuth 客户端获得授权"><el-table-column prop="client_name" label="已授权应用" min-width="150"/><el-table-column label="权限" min-width="100"><template #default="{ row }">{{ row.scopes.includes('write') ? '读写' : '只读' }}</template></el-table-column><el-table-column label="授权时间" min-width="165"><template #default="{ row }">{{ date(row.created_at) }}</template></el-table-column><el-table-column label="有效期至" min-width="165"><template #default="{ row }">{{ row.expires_at ? date(row.expires_at) : '永久' }}</template></el-table-column><el-table-column label="最近使用" min-width="165"><template #default="{ row }">{{ row.last_used_at ? date(row.last_used_at) : '尚未使用' }}</template></el-table-column><el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : row.status === 'expired' ? 'warning' : 'info'">{{ row.status === 'active' ? '有效' : row.status === 'expired' ? '已过期' : '已撤销' }}</el-tag></template></el-table-column><el-table-column label="操作" width="100"><template #default="{ row }"><el-button v-if="row.status === 'active'" text type="danger" @click="revokeOAuthGrant(row)">撤销</el-button></template></el-table-column></el-table>
+          </section>
           <section v-if="section === 'settings'" class="panel settings-panel"><div class="setting-row"><div><b>账号存储空间</b><p class="muted">含所有保留版本；下架不释放空间，彻底删除完成后归还。</p><el-button text type="primary" @click="manageFiles()">管理文件 / 清理空间</el-button></div><div class="account-storage"><b>剩余 {{ bytes(workspace.storage.remaining_bytes) }}</b><p class="muted">已用 {{ bytes(workspace.storage.used_bytes) }} / 配额 {{ bytes(workspace.storage.quota_bytes) }}</p><el-progress :percentage="Math.min(100, Math.round(Number(workspace.storage.used_bytes || 0) / Number(workspace.storage.quota_bytes || 1) * 100))" :show-text="false" /></div></div><div class="setting-row"><div><b>导航布局</b><p class="muted">所有本租户用户共用此设置；平铺仅展示末级菜单名称，不展开二、三级，原有结构保留。</p></div><el-radio-group :model-value="workspace.tenant.layout" @change="savePreferences({ layout: $event })"><el-radio-button value="side">左侧导航</el-radio-button><el-radio-button value="top">顶部导航</el-radio-button><el-radio-button value="flat">平铺</el-radio-button></el-radio-group></div><div class="setting-row"><div><b>页面打开方式</b><p class="muted">本租户共用；框架外在新标签页独立打开，仍需访问授权。</p></div><el-radio-group :model-value="workspace.tenant.open_mode" @change="savePreferences({ open_mode: $event })"><el-radio-button value="embedded">框架内显示</el-radio-button><el-radio-button value="external">框架外打开</el-radio-button></el-radio-group></div><div v-if="workspace.tenant.open_mode === 'external'" class="setting-row">
             <div><b>框架外授权有效期</b><p class="muted">仅影响此账号之后打开的页面，默认 5 分钟，最长 24 小时。到期后请回到工作空间重新打开。</p></div>
             <div class="inline">

@@ -2,6 +2,7 @@ import json
 import secrets
 import uuid
 from typing import Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -32,7 +33,12 @@ def workspace(user=Depends(current_user)):
 
 @router.get('/mcp/config')
 def mcp_config(user=Depends(current_user)):
-    return {'url': settings.mcp_url}
+    parsed = urlsplit(settings.mcp_url)
+    issuer = f'{parsed.scheme}://{parsed.netloc}'
+    return {'url': settings.mcp_url,
+            'authorization_server_metadata_url': issuer + '/.well-known/oauth-authorization-server',
+            'protected_resource_metadata_url': issuer + '/.well-known/oauth-protected-resource/mcp',
+            'token_endpoint_url': issuer + '/api/oauth/token'}
 
 
 class Preferences(BaseModel):
@@ -468,6 +474,7 @@ def credentials(user=Depends(current_user)):
 class CredentialInput(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     readonly: bool = False
+    expires_in_days: Literal[7, 30, 90, 180, 365] | None = 90
 
 
 @router.post('/credentials')
@@ -476,10 +483,12 @@ def new_credential(data: CredentialInput, user=Depends(current_user)):
         raise HTTPException(403, '只能通过网页登录创建 MCP 凭证')
     value = 'hub_' + token()
     with transaction(user['tenant_id']) as conn:
-        row = conn.execute('''INSERT INTO mcp_credentials(tenant_id,user_id,name,token_hash,scopes)
-            VALUES (%s,%s,%s,%s,%s) RETURNING id,expires_at''',
-            (user['tenant_id'], user['id'], data.name, digest(value), ['read'] if data.readonly else ['read', 'write'])).fetchone()
-        audit(conn, user, 'credential.create', {'id': str(row['id'])})
+        row = conn.execute('''INSERT INTO mcp_credentials(tenant_id,user_id,name,token_hash,scopes,expires_at)
+            VALUES (%s,%s,%s,%s,%s,CASE WHEN %s::integer IS NULL THEN NULL
+                ELSE now()+(%s::integer * interval '1 day') END) RETURNING id,expires_at''',
+            (user['tenant_id'], user['id'], data.name, digest(value), ['read'] if data.readonly else ['read', 'write'],
+             data.expires_in_days, data.expires_in_days)).fetchone()
+        audit(conn, user, 'credential.create', {'id': str(row['id']), 'expires_in_days': data.expires_in_days})
     return {**row, 'token': value}
 
 

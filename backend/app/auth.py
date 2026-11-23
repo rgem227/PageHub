@@ -32,9 +32,22 @@ def current_user(request: Request):
             row = conn.execute('''SELECT u.*, c.scopes, c.id AS credential_id FROM mcp_credentials c
                 JOIN users u ON u.id=c.user_id AND u.tenant_id=c.tenant_id
                 JOIN tenants t ON t.id=u.tenant_id
-                WHERE c.token_hash=%s AND c.active AND c.expires_at>now() AND u.active AND t.active AND t.deleted_at IS NULL''', (digest(value),)).fetchone()
+                WHERE c.token_hash=%s AND c.active AND (c.expires_at IS NULL OR c.expires_at>now())
+                    AND u.active AND t.active AND t.deleted_at IS NULL''', (digest(value),)).fetchone()
             if row:
                 conn.execute('UPDATE mcp_credentials SET last_used_at=now() WHERE id=%s', (row['credential_id'],))
+            elif request.url.path.startswith('/mcp'):
+                row = conn.execute('''SELECT u.*,g.scopes,g.id AS oauth_grant_id FROM oauth_access_tokens a
+                    JOIN oauth_grants g ON g.id=a.grant_id AND g.tenant_id=a.tenant_id
+                    JOIN users u ON u.id=g.user_id AND u.tenant_id=g.tenant_id
+                    JOIN tenants t ON t.id=u.tenant_id
+                    WHERE a.token_hash=%s AND a.expires_at>now() AND g.revoked_at IS NULL
+                        AND (g.expires_at IS NULL OR g.expires_at>now())
+                        AND u.active AND t.active AND t.deleted_at IS NULL''', (digest(value),)).fetchone()
+                if row:
+                    conn.execute('''UPDATE oauth_grants SET last_used_at=now()
+                        WHERE id=%s AND (last_used_at IS NULL OR last_used_at<now()-interval '1 minute')''',
+                        (row['oauth_grant_id'],))
         else:
             row = conn.execute('''SELECT u.*,s.token_hash AS session_hash FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=u.tenant_id
                 WHERE s.token_hash=%s AND s.expires_at>now() AND u.active AND t.active AND t.deleted_at IS NULL''', (digest(value),)).fetchone()
@@ -201,6 +214,8 @@ def change_password(data: PasswordInput, response: Response, user=Depends(curren
         conn.execute('UPDATE users SET password_hash=%s,must_change_password=false WHERE id=%s', (hashed, user['id']))
         conn.execute('DELETE FROM sessions WHERE user_id=%s', (user['id'],))
         conn.execute('UPDATE mcp_credentials SET active=false WHERE user_id=%s', (user['id'],))
+        conn.execute('UPDATE oauth_grants SET revoked_at=coalesce(revoked_at,now()) WHERE user_id=%s', (user['id'],))
+        conn.execute('DELETE FROM oauth_authorization_codes WHERE user_id=%s', (user['id'],))
         start_session(conn, response, user['id'])
         audit(conn, user, 'password.change', {})
     return {'ok': True}

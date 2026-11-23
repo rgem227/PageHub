@@ -1,10 +1,12 @@
 import io
 import base64
+import hashlib
 import json
 import time
 import uuid
 import zipfile
 from contextlib import contextmanager
+from datetime import date
 from urllib.parse import urlsplit
 
 import pytest
@@ -12,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app import storage
 from app.content import app as content_app
+from app.config import settings
 from app.db import pool, transaction
 from app.main import app
 from app.security import digest, passwords
@@ -34,6 +37,8 @@ def clients():
                 conn.execute('DELETE FROM file_deletions WHERE tenant_id=%s', (tenant_id,))
                 conn.execute('DELETE FROM account_shares WHERE tenant_id=%s OR recipient_tenant_id=%s', (tenant_id, tenant_id))
                 conn.execute('DELETE FROM page_shares WHERE tenant_id=%s', (tenant_id,))
+                conn.execute('DELETE FROM oauth_authorization_codes WHERE tenant_id=%s', (tenant_id,))
+                conn.execute('DELETE FROM oauth_grants WHERE tenant_id=%s', (tenant_id,))
                 for table in ['bookmarks', 'bookmark_categories', 'page_versions', 'pages']:
                     conn.execute(f'DELETE FROM {table} WHERE tenant_id=%s', (tenant_id,))
                 conn.execute('UPDATE menus SET name=id::text,parent_id=NULL WHERE tenant_id=%s', (tenant_id,))
@@ -44,6 +49,7 @@ def clients():
                 conn.execute('DELETE FROM tenants WHERE id=%s', (tenant_id,))
                 storage.remove_prefix(f'tenants/{tenant_id}/')
                 storage.remove_prefix(f'uploads/{tenant_id}/')
+            conn.execute('DELETE FROM oauth_clients WHERE client_name=%s', (NAMESPACE + '_oauth',))
 
 
 def account(clients, admin=False):
@@ -401,6 +407,8 @@ def test_catalogue_search_visibility_pagination_and_personal_view(clients):
     found = a.get('/api/catalogue', params={'q': 'Needle', 'size': 1}).json()
     assert found['total'] == 1 and len(found['items']) == 1
     assert found['items'][0]['matches'][0]['id'] == result['result']['page_id']
+    published = a.get('/api/pages/' + result['result']['page_id']).json()['created_at']
+    assert found['items'][0]['published_at'] == published
     assert b.get('/api/catalogue').json()['total'] == 0
     assert b.get('/api/page-list').json()['total'] == 0
     assert b.get('/api/upload-list').json()['total'] == 0
@@ -750,7 +758,131 @@ def test_mcp_real_protocol_and_scopes(clients):
     assert not allowed.json()['result'].get('isError'), allowed.text
     blocked = rpc(a, readonly, 'tools/call', {'name': 'create_menu', 'arguments': {'menu_path': ['blocked']}})
     assert blocked.json()['result']['isError']
-    assert a.post('/mcp/', json={}).status_code == 401
+    unauthenticated = a.post('/mcp/', json={})
+    assert unauthenticated.status_code == 401
+    assert 'resource_metadata=' in unauthenticated.headers['WWW-Authenticate']
+
+
+def register_oauth_client(client):
+    redirect_uri = 'http://127.0.0.1:8765/oauth/callback'
+    result = client.post('/api/oauth/register', json={
+        'client_name': NAMESPACE + '_oauth', 'redirect_uris': [redirect_uri],
+        'grant_types': ['authorization_code', 'refresh_token'], 'response_types': ['code'],
+        'token_endpoint_auth_method': 'none',
+    })
+    assert result.status_code == 201, result.text
+    return result.json(), redirect_uri
+
+
+def complete_oauth_authorization(client, client_id, redirect_uri, lifetime, scope=None):
+    verifier = 'A' * 43
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip('=')
+    params = {
+        'response_type': 'code', 'client_id': client_id, 'redirect_uri': redirect_uri,
+        'state': 'pagehub-test-state', 'code_challenge': challenge,
+        'code_challenge_method': 'S256', 'resource': settings.mcp_url,
+    }
+    if scope is not None:
+        params['scope'] = scope
+    start = client.get('/api/oauth/authorize', params=params, follow_redirects=False)
+    assert start.status_code == 303 and 'oauth_request=' in start.headers['location']
+    details = client.get('/api/oauth/authorize/details', params=params)
+    assert details.status_code == 200, details.text
+    expected_scopes = scope.split() if scope is not None else ['read', 'write']
+    assert details.json()['scopes'] == expected_scopes
+    approval = client.post('/api/oauth/authorize', json={**params, 'expires_in_days': lifetime})
+    assert approval.status_code == 200, approval.text
+    callback = urlsplit(approval.json()['redirect_uri'])
+    from urllib.parse import parse_qs
+    callback_params = parse_qs(callback.query)
+    assert callback_params['state'] == [params['state']]
+    return callback_params['code'][0], verifier
+
+
+def test_mcp_credential_expirations_and_permanent_token(clients):
+    client, tenant, _ = account(clients)
+    default = client.post('/api/credentials', json={'name': 'default expiry'}).json()
+    assert 89 <= (date.fromisoformat(default['expires_at'][:10]) - date.today()).days <= 91
+    for days in (7, 30, 90, 180, 365):
+        created = client.post('/api/credentials', json={'name': f'{days} days', 'expires_in_days': days})
+        assert created.status_code == 200 and created.json()['expires_at']
+    permanent = client.post('/api/credentials', json={'name': 'permanent', 'expires_in_days': None})
+    assert permanent.status_code == 200 and permanent.json()['expires_at'] is None
+    assert client.post('/api/credentials', json={'name': 'bad expiry', 'expires_in_days': 10}).status_code == 422
+    assert rpc(client, permanent.json()['token'], 'tools/list').status_code == 200
+    with transaction(tenant) as conn:
+        conn.execute('UPDATE mcp_credentials SET expires_at=now()-interval \'1 second\' WHERE token_hash=%s',
+                     (digest(permanent.json()['token']),))
+    expired = rpc(client, permanent.json()['token'], 'tools/list')
+    assert expired.status_code == 401 and 'WWW-Authenticate' in expired.headers
+
+
+def test_oauth_pkce_refresh_rotation_and_replay_revokes_grant(clients):
+    client, _, _ = account(clients)
+    metadata = client.get('/.well-known/oauth-authorization-server')
+    protected = client.get('/.well-known/oauth-protected-resource/mcp')
+    assert metadata.status_code == 200 and metadata.json()['code_challenge_methods_supported'] == ['S256']
+    assert metadata.json()['token_endpoint_auth_methods_supported'] == ['none']
+    assert protected.status_code == 200 and protected.json()['resource'] == settings.mcp_url.rstrip('/')
+    external = client.post('/api/oauth/register', headers={'Origin': 'https://client.example'}, json={
+        'client_name': NAMESPACE + '_oauth', 'redirect_uris': ['http://evil.example/callback'],
+    })
+    assert external.status_code == 400 and external.json()['error'] == 'invalid_redirect_uri'
+    assert external.headers['access-control-allow-origin'] == '*'
+    preflight = client.options('/api/oauth/token', headers={
+        'Origin': 'https://client.example', 'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+    })
+    assert preflight.status_code == 204 and preflight.headers['access-control-allow-origin'] == '*'
+    registered, redirect_uri = register_oauth_client(client)
+    code, verifier = complete_oauth_authorization(client, registered['client_id'], redirect_uri, 7)
+    token_result = client.post('/api/oauth/token', data={
+        'grant_type': 'authorization_code', 'client_id': registered['client_id'], 'code': code,
+        'redirect_uri': redirect_uri, 'code_verifier': verifier, 'resource': settings.mcp_url,
+    })
+    assert token_result.status_code == 200, token_result.text
+    first = token_result.json()
+    assert first['expires_in'] == 3600 and first['refresh_token'] and first['authorization_expires_at']
+    assert first['scope'] == 'read write'
+    assert rpc(client, first['access_token'], 'tools/list').status_code == 200
+    assert client.get('/api/workspace', headers={'Authorization': 'Bearer ' + first['access_token']}).status_code == 401
+    grant = client.get('/api/oauth/grants').json()[0]
+    assert grant['client_name'] == registered['client_name'] and grant['status'] == 'active'
+    rotated = client.post('/api/oauth/token', data={'grant_type': 'refresh_token', 'client_id': registered['client_id'],
+                                                     'refresh_token': first['refresh_token']})
+    assert rotated.status_code == 200 and rotated.json()['refresh_token'] != first['refresh_token']
+    replay = client.post('/api/oauth/token', data={'grant_type': 'refresh_token', 'client_id': registered['client_id'],
+                                                    'refresh_token': first['refresh_token']})
+    assert replay.status_code == 400 and replay.json()['error'] == 'invalid_grant'
+    assert rpc(client, rotated.json()['access_token'], 'tools/list').status_code == 401
+    assert client.get('/api/oauth/grants').json()[0]['status'] == 'revoked'
+
+
+def test_oauth_permanent_grant_can_be_revoked_and_isolated(clients):
+    client, _, _ = account(clients)
+    other, _, _ = account(clients)
+    registered, redirect_uri = register_oauth_client(client)
+    code, verifier = complete_oauth_authorization(client, registered['client_id'], redirect_uri, None, scope='read')
+    exchanged = client.post('/api/oauth/token', data={
+        'grant_type': 'authorization_code', 'client_id': registered['client_id'], 'code': code,
+        'redirect_uri': redirect_uri, 'code_verifier': verifier,
+    })
+    assert exchanged.status_code == 200 and exchanged.json()['authorization_expires_at'] is None
+    token_data = exchanged.json()
+    readable = rpc(client, token_data['access_token'], 'tools/call', {'name': 'list_menus', 'arguments': {}})
+    writable = rpc(client, token_data['access_token'], 'tools/call', {
+        'name': 'create_menu', 'arguments': {'menu_path': ['read-only-blocked']},
+    })
+    assert not readable.json()['result'].get('isError')
+    assert writable.json()['result']['isError']
+    grants = client.get('/api/oauth/grants').json()
+    assert len(grants) == 1 and grants[0]['expires_at'] is None and grants[0]['scopes'] == ['read']
+    grant_id = grants[0]['id']
+    assert other.get('/api/oauth/grants').json() == []
+    assert other.delete('/api/oauth/grants/' + grant_id).status_code == 404
+    revoked = client.delete('/api/oauth/grants/' + grant_id)
+    assert revoked.status_code == 200
+    assert rpc(client, token_data['access_token'], 'tools/list').status_code == 401
 
 
 def test_page_card_order_is_tenant_scoped_and_persistent(clients):
@@ -1275,6 +1407,8 @@ def test_mcp_configuration_real_ip_and_protocol(clients):
     endpoint = a.get('/api/mcp/config')
     assert endpoint.status_code == 200
     url = endpoint.json()['url']
+    assert endpoint.json()['authorization_server_metadata_url'].endswith('/.well-known/oauth-authorization-server')
+    assert endpoint.json()['token_endpoint_url'].endswith('/api/oauth/token')
     assert urlparse(url).hostname not in ('127.0.0.1', 'localhost', '0.0.0.0')
     credential = a.post('/api/credentials', json={'name': 'LAN MCP'}).json()['token']
     result = a.post(url, headers={'Authorization': 'Bearer ' + credential, 'Accept': 'application/json, text/event-stream'},

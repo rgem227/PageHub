@@ -3,7 +3,7 @@ import binascii
 from contextvars import ContextVar
 from functools import partial, wraps
 from uuid import UUID
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 import anyio
 from fastapi import HTTPException, Request
@@ -176,7 +176,16 @@ class MCPAuthentication:
                 raise HTTPException(401, '请在平台创建 MCP 凭证，并通过 Authorization: Bearer 提供')
             account = await anyio.to_thread.run_sync(current_user, request)
         except HTTPException as exc:
-            response = JSONResponse({'detail': exc.detail, 'register_url': settings.web_origin + '/?register=1'}, status_code=exc.status_code)
+            headers = {}
+            if exc.status_code == 401:
+                base = urlsplit(settings.mcp_url)
+                metadata = f'{base.scheme}://{base.netloc}/.well-known/oauth-protected-resource/mcp'
+                challenge = f'Bearer realm="PageHub MCP", resource_metadata="{metadata}"'
+                if request.headers.get('authorization', '').startswith('Bearer '):
+                    challenge += ', error="invalid_token"'
+                headers = {'WWW-Authenticate': challenge, 'Cache-Control': 'no-store'}
+            response = JSONResponse({'detail': exc.detail, 'register_url': settings.web_origin + '/?register=1'},
+                                    status_code=exc.status_code, headers=headers)
             await response(scope, receive, send)
             return
         context_token = identity.set(account)

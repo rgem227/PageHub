@@ -3,10 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
-from . import admin, api, auth, bookmarks, directory, files, shares
+from . import admin, api, auth, bookmarks, directory, files, oauth, shares
 from .config import settings
 from .db import pool
 from .mcp_server import MCPAuthentication, mcp
@@ -52,9 +52,17 @@ app.add_middleware(BodyLimit)
 
 @app.middleware('http')
 async def security_headers(request: Request, call_next):
+    oauth_public = (request.url.path in ('/api/oauth/register', '/api/oauth/token', '/api/oauth/revoke')
+                    or request.url.path.startswith('/.well-known/'))
+    if oauth_public and request.method == 'OPTIONS':
+        return Response(status_code=204, headers={
+            'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '600',
+            'Vary': 'Origin',
+        })
     if request.method in ('POST', 'PATCH', 'DELETE', 'PUT'):
         origin = request.headers.get('origin')
-        if origin and origin != settings.web_origin:
+        if origin and origin != settings.web_origin and not oauth_public:
             return JSONResponse({'detail': '请求来源不允许'}, status_code=403)
         try:
             length = int(request.headers.get('content-length', '0'))
@@ -63,6 +71,9 @@ async def security_headers(request: Request, call_next):
         if length > (settings.max_upload_mb * 4 // 3 + 2) * 1024**2:
             return JSONResponse({'detail': '请求超过上传限制'}, status_code=413)
     response = await call_next(request)
+    if oauth_public and request.headers.get('origin'):
+        response.headers.update({'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                                 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Vary': 'Origin'})
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['Cache-Control'] = 'no-store'
@@ -80,7 +91,10 @@ async def request_validation_error(request, exc):
               'password': '密码', 'old_password': '原密码', 'new_password': '新密码',
               'name': '名称', 'title': '页面标题', 'path': '菜单路径', 'position': '排序值',
               'parent_id': '上级菜单', 'menu_id': '所属菜单', 'tenant_id': '所属租户',
-              'quota_mb': '存储配额', 'file': '上传文件', 'url': '网站地址', 'description': '备注'}
+              'quota_mb': '存储配额', 'file': '上传文件', 'url': '网站地址', 'description': '备注',
+              'expires_in_days': '有效期', 'redirect_uris': 'OAuth 回调地址', 'client_name': '应用名称',
+              'token_endpoint_auth_method': '客户端认证方式', 'grant_types': '授权类型',
+              'response_types': '响应类型', 'scope': '权限范围'}
     if request.url.path.startswith('/api/credentials'):
         labels['name'] = '凭证名称'
     elif request.url.path.startswith('/api/bookmarks'):
@@ -112,6 +126,10 @@ async def request_validation_error(request, exc):
         else:
             message = f'{label}格式或取值不正确'
         errors.append({'loc': error['loc'], 'msg': message, 'type': kind})
+    if request.url.path == '/api/oauth/register':
+        error = 'invalid_redirect_uri' if any(item['loc'][-1:] == ('redirect_uris',) for item in errors) else 'invalid_client_metadata'
+        return JSONResponse({'error': error, 'error_description': errors[0]['msg'] if errors else 'OAuth 客户端信息无效'},
+                            status_code=400, headers={'Cache-Control': 'no-store', 'Pragma': 'no-cache'})
     return JSONResponse({'detail': errors}, status_code=422)
 
 
@@ -134,6 +152,7 @@ def health():
 
 app.include_router(auth.router)
 app.include_router(api.router)
+app.include_router(oauth.router)
 app.include_router(directory.router)
 app.include_router(admin.router)
 app.include_router(files.router)

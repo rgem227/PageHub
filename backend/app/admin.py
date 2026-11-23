@@ -52,6 +52,9 @@ def update_tenant(tenant_id: uuid.UUID, data: TenantUpdate, user=Depends(require
                            (data.name, data.quota_mb * 1024**2, data.active, tenant_id)).fetchone()
         if not row:
             raise HTTPException(404, '租户不存在')
+        if not data.active:
+            conn.execute('UPDATE oauth_grants SET revoked_at=coalesce(revoked_at,now()) WHERE tenant_id=%s', (tenant_id,))
+            conn.execute('DELETE FROM oauth_authorization_codes WHERE tenant_id=%s', (tenant_id,))
         audit(conn, user, 'admin.tenant.update', {'id': str(tenant_id), **data.model_dump()})
     return {'ok': True}
 
@@ -63,6 +66,8 @@ def delete_tenant(tenant_id: uuid.UUID, user=Depends(require_admin)):
     with transaction(admin=True) as conn:
         if not conn.execute('UPDATE tenants SET active=false,deleted_at=now() WHERE id=%s RETURNING id', (tenant_id,)).fetchone():
             raise HTTPException(404, '租户不存在')
+        conn.execute('UPDATE oauth_grants SET revoked_at=coalesce(revoked_at,now()) WHERE tenant_id=%s', (tenant_id,))
+        conn.execute('DELETE FROM oauth_authorization_codes WHERE tenant_id=%s', (tenant_id,))
         audit(conn, user, 'admin.tenant.delete', {'id': str(tenant_id), 'data_retained': True})
     return {'ok': True, 'message': '租户已逻辑删除，数据保留'}
 
@@ -142,6 +147,8 @@ def bulk_deactivate(data: BulkDeactivate, user=Depends(require_admin)):
         conn.execute('UPDATE users SET active=false WHERE id=ANY(%s)', (ids,))
         conn.execute('DELETE FROM sessions WHERE user_id=ANY(%s)', (ids,))
         conn.execute('UPDATE mcp_credentials SET active=false WHERE user_id=ANY(%s)', (ids,))
+        conn.execute('UPDATE oauth_grants SET revoked_at=coalesce(revoked_at,now()) WHERE user_id=ANY(%s)', (ids,))
+        conn.execute('DELETE FROM oauth_authorization_codes WHERE user_id=ANY(%s)', (ids,))
         for user_id in ids:
             audit(conn, user, 'admin.user.bulk_deactivate', {'id': str(user_id)})
     return {'ok': True, 'count': len(ids)}
@@ -173,6 +180,8 @@ def update_user(user_id: uuid.UUID, data: UserUpdate, user=Depends(require_admin
         if changed_identity:
             conn.execute('DELETE FROM sessions WHERE user_id=%s', (user_id,))
             conn.execute('UPDATE mcp_credentials SET active=false WHERE user_id=%s', (user_id,))
+            conn.execute('UPDATE oauth_grants SET revoked_at=coalesce(revoked_at,now()) WHERE user_id=%s', (user_id,))
+            conn.execute('DELETE FROM oauth_authorization_codes WHERE user_id=%s', (user_id,))
         audit(conn, user, 'admin.user.update', {'id': str(user_id), 'tenant_id': str(data.tenant_id), 'full_name': data.full_name, 'active': data.active, 'quota_mb': data.quota_mb})
     return {'ok': True, 'message': '账号设置已保存' if not changed_identity else '归属或状态已调整；原有页面保留在原租户，登录和 MCP 凭证已失效'}
 

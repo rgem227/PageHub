@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Directive } from 'vue'
 import { ArrowRight, Search, Grid, List, Share } from '@element-plus/icons-vue'
-import { api, json } from './api'
+import { api, date, json } from './api'
 
 const props = defineProps<{ menus: any[]; state: { q: string; category: string; sort: string; page: number; scroll: number }; view: string; external: boolean }>()
 const emit = defineEmits<{ choose: [id: string]; open: [page: any]; share: [menu: any]; view: [value: string]; change: [] }>()
@@ -115,7 +115,7 @@ onBeforeUnmount(() => { disposed = true; ++serial; arrivalObserver.disconnect();
             <span class="flat-link-mark" aria-hidden="true">{{ Array.from(menu.name)[0] }}</span>
             <span class="flat-link-copy"><span class="flat-link-name">{{ menu.name }}</span><span class="flat-link-path" :title="menu.path">{{ menu.path === menu.name ? '独立应用' : menu.path }}</span></span>
             <el-icon class="flat-link-arrow" aria-hidden="true"><ArrowRight /></el-icon>
-          </button><div class="directory-entry-footer"><span class="directory-entry-meta" :class="{ 'is-pending': !Number(menu.page_count) }">{{ Number(menu.page_count) ? menu.page_count + ' 个页面' + (external ? ' · 新窗口' : '') : '待发布' }}</span><el-button v-if="Number(menu.page_count) > 0" class="directory-entry-share" text size="small" :icon="Share" @click="emit('share', menu)">分享</el-button></div></div>
+          </button><div class="directory-entry-footer"><div class="directory-entry-details"><span class="directory-entry-meta" :class="{ 'is-pending': !Number(menu.page_count) }">{{ Number(menu.page_count) ? menu.page_count + ' 个页面' + (external ? ' · 新窗口' : '') : '待发布' }}</span><time v-if="menu.published_at" class="directory-entry-published" :datetime="menu.published_at">最近发布 {{ date(menu.published_at).split(' ')[0] }}</time></div><el-button v-if="Number(menu.page_count) > 0" class="directory-entry-share" text size="small" :icon="Share" @click="emit('share', menu)">分享</el-button></div></div>
           <div v-if="menu.matches.length" class="matched-pages"><button v-for="match in menu.matches" :key="match.id" :aria-label="'打开匹配页面：' + match.title" @click="emit('open', match)">{{ match.title }} <el-icon aria-hidden="true"><ArrowRight /></el-icon></button></div>
           </div></div>
         </div>
