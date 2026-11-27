@@ -9,11 +9,37 @@ from pydantic import BaseModel, Field, field_validator
 
 from .auth import require_admin
 from .config import settings
-from .db import audit, transaction
+from .db import audit, ensure_platform_settings, transaction
 from .security import passwords, phone_number, token
 from .listing import paginated, pattern
 
 router = APIRouter(prefix='/api/admin', tags=['平台管理'], dependencies=[Depends(require_admin)])
+
+
+@router.get('/settings')
+def platform_settings():
+    with transaction(admin=True) as conn:
+        ensure_platform_settings(conn)
+        return conn.execute('SELECT default_registration_quota_mb FROM platform_settings WHERE id=1').fetchone()
+
+
+class PlatformSettingsUpdate(BaseModel):
+    default_registration_quota_mb: int = Field(strict=True, ge=1, le=1048576)
+
+
+@router.patch('/settings')
+def update_platform_settings(data: PlatformSettingsUpdate, user=Depends(require_admin)):
+    with transaction(admin=True) as conn:
+        ensure_platform_settings(conn)
+        old = conn.execute('SELECT default_registration_quota_mb FROM platform_settings WHERE id=1 FOR UPDATE').fetchone()
+        row = conn.execute('''UPDATE platform_settings SET default_registration_quota_mb=%s,updated_by=%s,updated_at=now()
+            WHERE id=1 RETURNING default_registration_quota_mb''',
+            (data.default_registration_quota_mb, user['id'])).fetchone()
+        audit(conn, user, 'admin.settings.registration_quota.update', {
+            'old_default_registration_quota_mb': old['default_registration_quota_mb'],
+            'default_registration_quota_mb': row['default_registration_quota_mb'],
+        })
+    return row
 
 
 @router.get('/tenants')

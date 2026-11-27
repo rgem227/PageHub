@@ -32,6 +32,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS quota_bytes bigint NOT NULL DEFAULT 1
 ALTER TABLE users ADD COLUMN IF NOT EXISTS directory_view text NOT NULL DEFAULT 'compact' CHECK (directory_view IN ('compact','list'));
 ALTER TABLE users ADD COLUMN IF NOT EXISTS external_preview_minutes integer NOT NULL DEFAULT 5 CHECK (external_preview_minutes BETWEEN 1 AND 1440);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_activity_at timestamptz;
+CREATE TABLE IF NOT EXISTS platform_settings (
+    id smallint PRIMARY KEY DEFAULT 1 CHECK (id=1),
+    default_registration_quota_mb integer NOT NULL DEFAULT 1024 CHECK (default_registration_quota_mb BETWEEN 1 AND 1048576),
+    updated_by uuid REFERENCES users ON DELETE SET NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO platform_settings(id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS sms_codes (
     phone text PRIMARY KEY, code_hash text NOT NULL, expires_at timestamptz NOT NULL,
     attempts integer NOT NULL DEFAULT 0, sent_at timestamptz NOT NULL DEFAULT now()
@@ -286,6 +293,16 @@ DO $$ DECLARE t text; BEGIN
             EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id = nullif(current_setting(''app.tenant_id'',true),'''')::uuid OR current_setting(''app.admin'',true)=''true'') WITH CHECK (tenant_id = nullif(current_setting(''app.tenant_id'',true),'''')::uuid OR current_setting(''app.admin'',true)=''true'')',t);
         END IF;
     END LOOP;
+END $$;
+
+ALTER TABLE platform_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_settings FORCE ROW LEVEL SECURITY;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname=current_schema() AND tablename='platform_settings' AND policyname='platform_admin_only') THEN
+        CREATE POLICY platform_admin_only ON platform_settings
+        USING (current_setting('app.admin',true)='true')
+        WITH CHECK (current_setting('app.admin',true)='true');
+    END IF;
 END $$;
 
 ALTER TABLE account_shares ENABLE ROW LEVEL SECURITY;

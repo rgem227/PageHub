@@ -22,3 +22,8 @@ def transaction(tenant_id=None, admin=False, user_id=None):
 def audit(conn, user, action, detail):
     conn.execute('INSERT INTO audit_logs (tenant_id, user_id, action, detail) VALUES (%s,%s,%s,%s)',
                  (user['tenant_id'], user['id'], action, json.dumps(detail, ensure_ascii=False)))
+
+
+def ensure_platform_settings(conn):
+    conn.execute('''INSERT INTO platform_settings(id,default_registration_quota_mb) VALUES (1,%s)
+        ON CONFLICT (id) DO NOTHING''', (settings.default_quota_mb,))

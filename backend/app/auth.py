@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 from psycopg.errors import UniqueViolation
 
 from .config import settings
-from .db import audit, transaction
+from .db import audit, ensure_platform_settings, transaction
 from .security import digest, passwords, phone_number, token
 
 router = APIRouter(prefix='/api/auth', tags=['认证'])
@@ -140,10 +140,13 @@ def register(data: RegisterInput, response: Response, request: Request):
     hashed = passwords.hash(data.password)
     try:
         with transaction(admin=True) as conn:
+            ensure_platform_settings(conn)
+            quota_mb = conn.execute('SELECT default_registration_quota_mb FROM platform_settings WHERE id=1').fetchone()['default_registration_quota_mb']
+            quota_bytes = quota_mb * 1024**2
             tenant = conn.execute('INSERT INTO tenants(name,quota_bytes) VALUES (%s,%s) RETURNING id',
-                                  (data.username + '的空间', settings.default_quota_mb * 1024**2)).fetchone()
-            user = conn.execute('INSERT INTO users(tenant_id,username,full_name,phone,password_hash) VALUES (%s,%s,%s,%s,%s) RETURNING *',
-                                (tenant['id'], data.username, data.full_name, phone, hashed)).fetchone()
+                                  (data.username + '的空间', quota_bytes)).fetchone()
+            user = conn.execute('INSERT INTO users(tenant_id,username,full_name,phone,password_hash,quota_bytes) VALUES (%s,%s,%s,%s,%s,%s) RETURNING *',
+                                (tenant['id'], data.username, data.full_name, phone, hashed, quota_bytes)).fetchone()
             audit(conn, user, 'register', {})
             start_session(conn, response, user['id'])
             return public_user(user)

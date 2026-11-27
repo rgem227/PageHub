@@ -1340,6 +1340,50 @@ def test_admin_permissions_stop_and_reassign(clients):
     assert a.post('/api/preferences', headers={'Origin': 'https://attacker.example'}, json={}).status_code == 403
 
 
+def test_platform_registration_quota_applies_only_to_new_accounts(clients):
+    main, _ = clients
+    admin, _, _ = account(clients, admin=True)
+    existing, existing_tenant, existing_id = account(clients)
+    original = admin.get('/api/admin/settings')
+    assert original.status_code == 200, original.text
+    original_quota = original.json()['default_registration_quota_mb']
+    existing_quota = existing.get('/api/workspace').json()['storage']['quota_bytes']
+    try:
+        assert existing.get('/api/admin/settings').status_code == 403
+        assert admin.patch('/api/admin/settings', json={'default_registration_quota_mb': 0}).status_code == 422
+        assert admin.patch('/api/admin/settings', json={'default_registration_quota_mb': 1048577}).status_code == 422
+        assert admin.patch('/api/admin/settings', json={'default_registration_quota_mb': 1.5}).status_code == 422
+
+        updated = admin.patch('/api/admin/settings', json={'default_registration_quota_mb': 1536})
+        assert updated.status_code == 200, updated.text
+        assert updated.json()['default_registration_quota_mb'] == 1536
+        assert existing.get('/api/workspace').json()['storage']['quota_bytes'] == existing_quota
+        with transaction(admin=True) as conn:
+            old_tenant = conn.execute('SELECT quota_bytes FROM tenants WHERE id=%s', (existing_tenant,)).fetchone()
+            old_user = conn.execute('SELECT quota_bytes FROM users WHERE id=%s', (existing_id,)).fetchone()
+            assert old_tenant['quota_bytes'] == existing_quota
+            assert old_user['quota_bytes'] == existing_quota
+
+        phone = '139' + str(uuid.uuid4().int % 10**8).zfill(8)
+        sms = main.post('/api/auth/sms', json={'phone': phone})
+        assert sms.status_code == 200, sms.text
+        registered = main.post('/api/auth/register', json={
+            'username': 'new_' + uuid.uuid4().hex[:12], 'full_name': '新注册用户', 'phone': phone,
+            'code': sms.json()['development_code'], 'password': 'StrongTestPassword!',
+        })
+        assert registered.status_code == 200, registered.text
+        assert main.get('/api/workspace').json()['storage']['quota_bytes'] == 1536 * 1024**2
+        with transaction(admin=True) as conn:
+            tenant = conn.execute('SELECT quota_bytes FROM tenants WHERE id=%s', (registered.json()['tenant_id'],)).fetchone()
+            user = conn.execute('SELECT quota_bytes FROM users WHERE id=%s', (registered.json()['id'],)).fetchone()
+            assert tenant['quota_bytes'] == user['quota_bytes'] == 1536 * 1024**2
+        assert admin.get('/api/admin/settings').json()['default_registration_quota_mb'] == 1536
+    finally:
+        assert admin.patch('/api/admin/settings', json={
+            'default_registration_quota_mb': original_quota,
+        }).status_code == 200
+
+
 def test_admin_lists_include_contact_details_and_failed_upload_reason(clients):
     admin, _, _ = account(clients, admin=True)
     user, tenant, user_id = account(clients)

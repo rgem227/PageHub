@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Grid, OfficeBuilding, User, UploadFilled, Monitor, Document, Search, Refresh, Plus, Menu, FolderOpened } from '@element-plus/icons-vue'
+import { Grid, OfficeBuilding, User, UploadFilled, Monitor, Document, Search, Refresh, Plus, Menu, FolderOpened, Setting } from '@element-plus/icons-vue'
 import { api, bytes, date, json } from './api'
 import FileManager from './FileManager.vue'
 
@@ -9,7 +9,7 @@ const navigation = [
   { id: 'overview', name: '平台概览', icon: Grid }, { id: 'tenants', name: '租户管理', icon: OfficeBuilding },
   { id: 'users', name: '用户管理', icon: User }, { id: 'uploads', name: '上传任务', icon: UploadFilled },
   { id: 'resources', name: '资源监控', icon: Monitor }, { id: 'audit', name: '审计日志', icon: Document },
-  { id: 'files', name: '文件管理', icon: FolderOpened },
+  { id: 'files', name: '文件管理', icon: FolderOpened }, { id: 'settings', name: '平台设置', icon: Setting },
 ]
 const initial = new URLSearchParams(location.search).get('admin') || 'overview'
 const section = ref(navigation.some(n => n.id === initial) ? initial : 'overview')
@@ -22,6 +22,7 @@ const loading = ref(false)
 const fileRefresh = ref(0)
 const error = ref('')
 const overview = ref<any>({})
+const registrationQuotaMb = ref(1024)
 const userActivity = ref<any>({})
 const selectedUsers = ref<any[]>([])
 const resources = ref<any>({})
@@ -78,6 +79,10 @@ async function load() {
       if (serial !== request || disposed) return
       if (section.value === 'overview') overview.value = result
       else { resources.value = { ...resources.value, ...result }; lastStorageRefresh = Date.now() }
+    } else if (section.value === 'settings') {
+      const result = await api('/admin/settings')
+      if (serial !== request || disposed) return
+      registrationQuotaMb.value = result.default_registration_quota_mb
     } else {
       const f = filter.value
       const params = new URLSearchParams({ q: f.q, status: f.status, page: String(f.page), size: '20', action: f.action })
@@ -149,6 +154,18 @@ function drill(value: string, status = 'all') { filters[value].status = status; 
 function filterActivity(value: string) { filters.users.activity = filters.users.activity === value ? 'all' : value; filters.users.page = 1; selectSection('users') }
 function setSelectedUsers(value: any[]) { selectedUsers.value = value }
 function refreshVisibleUsers() { if (section.value === 'users' && document.visibilityState === 'visible') void load() }
+async function savePlatformSettings() {
+  if (!Number.isInteger(registrationQuotaMb.value) || registrationQuotaMb.value < 1 || registrationQuotaMb.value > 1048576) {
+    ElMessage.warning('默认空间大小须为 1 至 1,048,576 MB 的整数'); return
+  }
+  saving.value = true
+  try {
+    const result = await api('/admin/settings', json('PATCH', { default_registration_quota_mb: registrationQuotaMb.value }))
+    registrationQuotaMb.value = result.default_registration_quota_mb
+    ElMessage.success('注册默认空间设置已保存')
+  } catch (e: any) { ElMessage.error(e.message) }
+  finally { saving.value = false }
+}
 async function deactivateSelected() {
   if (!selectedUsers.value.length) return
   try {
@@ -223,6 +240,19 @@ onBeforeUnmount(() => { disposed = true; ++request; ++detailRequest; if (searchT
           <p class="muted">{{ resources.scope }} · 主机采集于 {{ date(resources.sampled_at) }}<span v-if="resources.storage_sampled_at"> · 数据库与存储统计于 {{ date(resources.storage_sampled_at) }}</span><span v-if="resourceAutoRefresh"> · 自动刷新已开启（5 秒）</span></p>
           <div class="console-stat-grid"><article><span>CPU 使用率</span><strong>{{ resources.cpu_percent ?? '—' }}<small>%</small></strong><el-progress :percentage="Number(resources.cpu_percent || 0)" :show-text="false" /></article><article><span>内存使用率</span><strong>{{ resources.memory_percent ?? '—' }}<small>%</small></strong><el-progress :percentage="Number(resources.memory_percent || 0)" :show-text="false" /><small>{{ bytes(resources.memory_used) }} / {{ bytes(resources.memory_total) }}</small></article><article><span>磁盘已用</span><strong>{{ bytes(resources.disk_used) }}</strong><small>剩余 {{ bytes(resources.disk_free) }}</small></article><article><span>数据库大小</span><strong>{{ bytes(resources.database_bytes) }}</strong><small>PostgreSQL 物理用量</small></article></div>
           <div class="console-overview-panels"><section class="panel"><h2>上传处理队列</h2><div v-for="state in ['queued','processing','success','failed']" :key="state" class="metric-row"><button v-if="state === 'failed'" class="queue-failure-link" :disabled="!(resources.jobs?.find((j: any) => j.status === state)?.count || 0)" @click="showFailedUploads()">{{ uploadLabel[state] }}</button><span v-else>{{ uploadLabel[state] }}</span><b>{{ resources.jobs?.find((j: any) => j.status === state)?.count || 0 }}</b></div></section><section class="panel"><h2>页面版本存储</h2><strong class="resource-value">{{ bytes(resources.page_storage_bytes) }}</strong><p class="muted">{{ resources.storage_note }}</p><p class="muted">本页为即时采集数据。HTML 在用户浏览器中运行，浏览器 CPU 与内存不计入主机用户用量。</p></section></div>
+        </template>
+        <template v-else-if="section === 'settings'">
+          <section class="panel platform-settings-panel">
+            <div class="section-heading"><div><h2>新注册账号默认空间</h2><p class="muted">每个注册账号会创建独立空间，此数值同时用于账号配额和空间配额。</p></div></div>
+            <el-form label-position="top" class="platform-settings-form" @submit.prevent="savePlatformSettings">
+              <el-form-item label="默认空间大小（MB）" required>
+                <el-input-number v-model="registrationQuotaMb" :min="1" :max="1048576" :precision="0" controls-position="right" />
+                <span class="muted">{{ bytes(registrationQuotaMb * 1024 ** 2) }}</span>
+              </el-form-item>
+              <el-alert title="只影响保存后新注册的账号；已有账号和空间的配额不会改变。" type="info" :closable="false" />
+              <el-button type="primary" :loading="saving" @click="savePlatformSettings">保存设置</el-button>
+            </el-form>
+          </section>
         </template>
         <FileManager v-else-if="section === 'files'" platform :refresh-key="fileRefresh" />
         <template v-else>

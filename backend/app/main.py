@@ -92,6 +92,7 @@ async def request_validation_error(request, exc):
               'name': '名称', 'title': '页面标题', 'path': '菜单路径', 'position': '排序值',
               'parent_id': '上级菜单', 'menu_id': '所属菜单', 'tenant_id': '所属租户',
               'quota_mb': '存储配额', 'file': '上传文件', 'url': '网站地址', 'description': '备注',
+              'default_registration_quota_mb': '新注册账号默认空间（MB）',
               'expires_in_days': '有效期', 'redirect_uris': 'OAuth 回调地址', 'client_name': '应用名称',
               'token_endpoint_auth_method': '客户端认证方式', 'grant_types': '授权类型',
               'response_types': '响应类型', 'scope': '权限范围'}
@@ -123,6 +124,8 @@ async def request_validation_error(request, exc):
             message = '用户名须以汉字、字母或下划线开头，仅包含汉字、字母、数字或下划线'
         elif kind == 'string_pattern_mismatch' and field == 'code':
             message = '短信验证码须为 6 位数字'
+        elif field == 'default_registration_quota_mb' and kind in ('greater_than_equal', 'less_than_equal', 'int_type'):
+            message = '新注册账号默认空间须为 1 至 1,048,576 MB 的整数'
         else:
             message = f'{label}格式或取值不正确'
         errors.append({'loc': error['loc'], 'msg': message, 'type': kind})
